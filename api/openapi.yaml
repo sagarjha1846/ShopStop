@@ -1,0 +1,415 @@
+openapi: 3.1.0
+info:
+  title: ShopStop API
+  version: 1.0.0
+  description: >
+    REST API for the ShopStop trust-first marketplace. All endpoints are under
+    /api/v1. Auth uses short-lived JWT access tokens (Authorization: Bearer) with
+    rotating refresh tokens in httpOnly secure cookies. Money is in integer minor
+    units (paise) with an explicit currency. This file documents the primary
+    surface; the full contract is generated from NestJS + Zod/OpenAPI decorators.
+servers:
+  - url: https://api.shopstop.app/api/v1
+  - url: http://localhost:4000/api/v1
+
+tags:
+  - name: Auth
+  - name: Users
+  - name: Categories
+  - name: Listings
+  - name: Search
+  - name: Messaging
+  - name: Orders
+  - name: Payments
+  - name: Reviews
+  - name: Trust & Safety
+  - name: Admin
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Register with email + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResult' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Login (may require MFA challenge)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResult' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/otp/request:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Request a phone OTP
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [phone], properties: { phone: { type: string } } } } }
+      responses: { '202': { description: OTP sent }, '429': { $ref: '#/components/responses/RateLimited' } }
+
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Verify phone OTP
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [phone, code], properties: { phone: { type: string }, code: { type: string } } } } }
+      responses: { '200': { description: Verified, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResult' } } } } }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Rotate refresh token (cookie) → new access token
+      responses: { '200': { description: OK }, '401': { $ref: '#/components/responses/Unauthorized' } }
+
+  /auth/logout:
+    post: { tags: [Auth], summary: Revoke current session, responses: { '204': { description: No Content } } }
+
+  /me:
+    get:
+      tags: [Users]
+      summary: Current user profile
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } } }
+
+  /users/{handle}:
+    get:
+      tags: [Users]
+      security: []
+      summary: Public profile (trust panel)
+      parameters: [{ name: handle, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PublicProfile' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+
+  /categories:
+    get:
+      tags: [Categories]
+      security: []
+      summary: Category tree with attribute schemas
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Category' } } } } } }
+
+  /listings:
+    get:
+      tags: [Listings]
+      security: []
+      summary: List/browse (paginated, filterable)
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - { name: categoryId, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [recent, price_asc, price_desc, trending] } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListingPage' } } } } }
+    post:
+      tags: [Listings]
+      summary: Create listing (draft or publish; publish runs risk checks)
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ListingInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Listing' } } } }
+        '202': { description: Accepted, held for review (risk) }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /listings/{id}:
+    get:
+      tags: [Listings]
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Listing' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      tags: [Listings]
+      summary: Update (owner only) — edit/pause/archive/duplicate handled via status/ops
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ListingInput' } } } }
+      responses: { '200': { description: OK }, '403': { $ref: '#/components/responses/Forbidden' } }
+    delete:
+      tags: [Listings]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: No Content } }
+
+  /listings/{id}/report:
+    post:
+      tags: [Trust & Safety]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReportInput' } } } }
+      responses: { '202': { description: Report received } }
+
+  /media/upload-url:
+    post:
+      tags: [Listings]
+      summary: Get a signed S3 upload URL (client uploads direct; async scan)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [contentType], properties: { contentType: { type: string }, sizeBytes: { type: integer } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { uploadUrl: { type: string }, storageKey: { type: string } } } } } } }
+
+  /search:
+    get:
+      tags: [Search]
+      security: []
+      summary: Full-text + filtered search
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: categoryId, in: query, schema: { type: string } }
+        - { name: minPrice, in: query, schema: { type: integer } }
+        - { name: maxPrice, in: query, schema: { type: integer } }
+        - { name: condition, in: query, schema: { type: string } }
+        - { name: lat, in: query, schema: { type: number } }
+        - { name: lng, in: query, schema: { type: number } }
+        - { name: radiusKm, in: query, schema: { type: number } }
+        - { name: verifiedOnly, in: query, schema: { type: boolean } }
+        - { name: minRating, in: query, schema: { type: number } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ListingPage' } } } } }
+
+  /search/autocomplete:
+    get:
+      tags: [Search]
+      security: []
+      parameters: [{ name: q, in: query, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { type: string } } } } } }
+
+  /threads:
+    get: { tags: [Messaging], summary: My conversations, responses: { '200': { description: OK } } }
+    post:
+      tags: [Messaging]
+      summary: Start/find a thread for a listing
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [listingId], properties: { listingId: { type: string } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Thread' } } } } }
+
+  /threads/{id}/messages:
+    get:
+      tags: [Messaging]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: cursor, in: query, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+    post:
+      tags: [Messaging]
+      summary: Send message or structured offer
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MessageInput' } } } }
+      responses: { '201': { description: Created } }
+
+  /orders:
+    get: { tags: [Orders], summary: My orders (buyer/seller via ?role=), responses: { '200': { description: OK } } }
+    post:
+      tags: [Orders]
+      summary: Create order from an accepted offer/listing
+      parameters: [{ name: Idempotency-Key, in: header, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/OrderInput' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Order' } } } } }
+
+  /orders/{id}/transition:
+    post:
+      tags: [Orders]
+      summary: Advance order state (validated state machine)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [action], properties: { action: { type: string, enum: [accept, reject, pack, ship, deliver, cancel, return, refund] } } } } } }
+      responses: { '200': { description: OK }, '409': { description: Illegal transition } }
+
+  /orders/{id}/dispute:
+    post:
+      tags: [Trust & Safety]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DisputeInput' } } } }
+      responses: { '201': { description: Dispute opened } }
+
+  /payments/intent:
+    post:
+      tags: [Payments]
+      summary: Create a payment intent/order at the gateway for an order
+      parameters: [{ name: Idempotency-Key, in: header, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [orderId], properties: { orderId: { type: string }, provider: { type: string, enum: [RAZORPAY, CASHFREE, PHONEPE] } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentIntent' } } } } }
+
+  /payments/webhook/{provider}:
+    post:
+      tags: [Payments]
+      security: []
+      summary: Gateway webhook (signature-verified, idempotent)
+      parameters: [{ name: provider, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Acknowledged } }
+
+  /reviews:
+    post:
+      tags: [Reviews]
+      summary: Review counterparty for a completed order
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewInput' } } } }
+      responses: { '201': { description: Created }, '403': { $ref: '#/components/responses/Forbidden' } }
+
+  /admin/moderation/queue:
+    get:
+      tags: [Admin]
+      summary: Prioritized moderation/fraud queue
+      parameters: [{ name: type, in: query, schema: { type: string, enum: [listing, user, message, fraud] } }]
+      responses: { '200': { description: OK } }
+
+  /admin/moderation/{subjectType}/{id}/action:
+    post:
+      tags: [Admin]
+      summary: Apply moderation decision (audit-logged)
+      parameters:
+        - { name: subjectType, in: path, required: true, schema: { type: string, enum: [LISTING, USER, MESSAGE] } }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [decision], properties: { decision: { type: string, enum: [APPROVE, REJECT, SUSPEND, BAN, RESTRICT, DISMISS] }, reason: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  responses:
+    Unauthorized: { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Conflict, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    ValidationError: { description: Validation failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    RateLimited:
+      description: Too many requests
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string }
+            details: { type: array, items: { type: object } }
+            requestId: { type: string }
+    Money:
+      type: object
+      properties: { amountMinor: { type: integer }, currency: { type: string, example: INR } }
+    RegisterInput:
+      type: object
+      required: [email, password]
+      properties: { email: { type: string, format: email }, password: { type: string, minLength: 10 }, displayName: { type: string } }
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties: { email: { type: string }, password: { type: string }, mfaCode: { type: string } }
+    AuthResult:
+      type: object
+      properties: { accessToken: { type: string }, expiresIn: { type: integer }, user: { $ref: '#/components/schemas/User' }, mfaRequired: { type: boolean } }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [USER, MODERATOR, ADMIN] }
+        emailVerified: { type: boolean }
+        phoneVerified: { type: boolean }
+        profile: { $ref: '#/components/schemas/PublicProfile' }
+    PublicProfile:
+      type: object
+      properties:
+        handle: { type: string }
+        displayName: { type: string }
+        avatarUrl: { type: string }
+        memberSince: { type: string, format: date-time }
+        trustScore: { type: integer }
+        badges: { type: array, items: { type: string, enum: [EMAIL, PHONE, IDENTITY, BUSINESS] } }
+        ratingAvg: { type: number }
+        ratingCount: { type: integer }
+        completedSales: { type: integer }
+        responseMins: { type: integer }
+    Category:
+      type: object
+      properties:
+        id: { type: string }
+        slug: { type: string }
+        name: { type: string }
+        parentId: { type: string, nullable: true }
+        attributeSchema: { type: object, description: JSON schema of category-specific fields }
+    ListingInput:
+      type: object
+      required: [categoryId, title, priceMinor]
+      properties:
+        categoryId: { type: string }
+        type: { type: string, enum: [PHYSICAL, DIGITAL, SERVICE] }
+        title: { type: string }
+        description: { type: string }
+        condition: { type: string, enum: [NEW, LIKE_NEW, GOOD, FAIR, FOR_PARTS] }
+        priceMinor: { type: integer }
+        currency: { type: string, default: INR }
+        negotiable: { type: boolean }
+        quantity: { type: integer }
+        attributes: { type: object, description: values validated against category attributeSchema }
+        tags: { type: array, items: { type: string } }
+        mediaKeys: { type: array, items: { type: string } }
+        locationText: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        publish: { type: boolean, description: false=draft, true=publish (risk-checked) }
+    Listing:
+      allOf:
+        - $ref: '#/components/schemas/ListingInput'
+        - type: object
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [DRAFT, PENDING_REVIEW, ACTIVE, PAUSED, SOLD, ARCHIVED, REJECTED, REMOVED] }
+            seller: { $ref: '#/components/schemas/PublicProfile' }
+            createdAt: { type: string, format: date-time }
+    ListingPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Listing' } }
+        nextCursor: { type: string, nullable: true }
+    Thread:
+      type: object
+      properties: { id: { type: string }, listingId: { type: string }, participants: { type: array, items: { type: string } }, lastMessageAt: { type: string, format: date-time } }
+    MessageInput:
+      type: object
+      properties:
+        kind: { type: string, enum: [TEXT, IMAGE, FILE, OFFER] }
+        body: { type: string }
+        mediaKey: { type: string }
+        offerMinor: { type: integer, description: required when kind=OFFER }
+    OrderInput:
+      type: object
+      required: [listingId, quantity]
+      properties: { listingId: { type: string }, quantity: { type: integer }, offerMessageId: { type: string }, shippingAddressId: { type: string }, couponCode: { type: string } }
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [PENDING, ACCEPTED, REJECTED, PACKED, SHIPPED, DELIVERED, CANCELLED, RETURNED, REFUNDED] }
+        totalMinor: { type: integer }
+        currency: { type: string }
+        timeline: { type: array, items: { type: object } }
+    PaymentIntent:
+      type: object
+      properties: { provider: { type: string }, providerOrderId: { type: string }, amountMinor: { type: integer }, currency: { type: string }, clientToken: { type: string } }
+    ReviewInput:
+      type: object
+      required: [orderId, rating]
+      properties: { orderId: { type: string }, rating: { type: integer, minimum: 1, maximum: 5 }, body: { type: string }, mediaKeys: { type: array, items: { type: string } } }
+    ReportInput:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string }, details: { type: string } }
+    DisputeInput:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string }, evidence: { type: array, items: { type: string } } }
