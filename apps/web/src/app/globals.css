@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Semantic design tokens — light default, dark override. See docs/04. */
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --bg: #f7f7f9;
+  --surface: #ffffff;
+  --border: #e6e6ec;
+  --text: #16161d;
+  --muted: #6b6b78;
+  --brand: #5b5bd6;
+  --brand-fg: #ffffff;
+  --accent: #12b981;
+  --verified: #2f6fed;
+  --success: #12b981;
+  --warn: #d9930a;
+  --danger: #e5484d;
+}
+
+:root[data-theme='dark'],
+.dark {
+  --bg: #0d0d12;
+  --surface: #17171f;
+  --border: #26262f;
+  --text: #ececf1;
+  --muted: #9a9aa7;
+  --brand: #7c7cf0;
+  --brand-fg: #0d0d12;
+  --accent: #2dd4a7;
+  --verified: #5b8def;
+  --success: #2dd4a7;
+  --warn: #f0b30a;
+  --danger: #ff6369;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0d0d12;
+    --surface: #17171f;
+    --border: #26262f;
+    --text: #ececf1;
+    --muted: #9a9aa7;
+    --brand: #7c7cf0;
+    --brand-fg: #0d0d12;
+    --accent: #2dd4a7;
+    --verified: #5b8def;
+    --success: #2dd4a7;
+    --warn: #f0b30a;
+    --danger: #ff6369;
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}

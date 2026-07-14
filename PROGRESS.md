@@ -50,11 +50,13 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Users public trust profile (score + badges, no PII) + follow
 - [~] Trust-score recompute worker (BullMQ) → Phase 7; counters updated inline for now
 
-## Phase 6 — Frontend (apps/web, Next.js)
-- [ ] Next.js scaffold + Tailwind + design tokens (light/dark) + shadcn base
-- [ ] API client + auth flow (silent refresh) + query client
-- [ ] Home / search / listing / profile (SSR, SEO)
-- [ ] Sell wizard, dashboards (buyer/seller), messages, admin console
+## Phase 6 — Frontend (apps/web, Next.js)  ✅ core slice verified against live API
+- [x] Next.js 15 App Router + Tailwind + design tokens (light/dark, no-FOUC) + UI primitives
+- [x] API client (SSR direct / browser proxy) + client auth (login/register/refresh, in-mem token)
+- [x] Home (SSR + revalidate), Search (live FTS), Listing detail (SSR + JSON-LD + trust panel)
+- [x] Sell page (auth-gated, data-driven category attribute form → risk-checked publish)
+- [~] Dashboards (buyer/seller), messages UI, admin console, profile page → next
+- [x] Verified live: home/search/listing render 200 with seeded data; `next build` clean (8 routes)
 
 ## Phase 7 — Hardening & delivery
 - [ ] Test suites (unit/integration/e2e) + coverage gate

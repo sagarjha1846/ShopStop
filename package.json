@@ -33,7 +33,9 @@
       "@prisma/engines",
       "prisma",
       "@swc/core",
-      "argon2"
+      "argon2",
+      "sharp",
+      "unrs-resolver"
     ]
   }
 }
