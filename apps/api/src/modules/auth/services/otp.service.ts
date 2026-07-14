@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash, randomInt } from 'node:crypto';
-import { AppConfigService } from '../../../config/config.module';
+import { AppConfigService } from '../../../config/config.service';
 import { RedisService } from '../../../redis/redis.service';
 import { AppError } from '../../../common/errors/app-error';
 

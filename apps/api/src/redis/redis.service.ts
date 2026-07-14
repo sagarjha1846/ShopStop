@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
-import { AppConfigService } from '../config/config.module';
+import { AppConfigService } from '../config/config.service';
 
 /**
  * Single shared ioredis connection: cache, rate-limit buckets, idempotency store,

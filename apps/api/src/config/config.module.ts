@@ -1,27 +1,12 @@
-import { Global, Injectable, Module } from '@nestjs/common';
-import { ConfigModule as NestConfigModule, ConfigService } from '@nestjs/config';
-import { validateEnv, type Env } from './env.schema';
+import { Global, Module } from '@nestjs/common';
+import { ConfigModule as NestConfigModule } from '@nestjs/config';
+import { validateEnv } from './env.schema';
+import { AppConfigService } from './config.service';
 
-/**
- * Typed wrapper over ConfigService — compile-time-safe access to env values.
- * Never read process.env directly; inject this instead.
- */
-@Injectable()
-export class AppConfigService {
-  constructor(private readonly config: ConfigService<Env, true>) {}
-
-  get<K extends keyof Env>(key: K): Env[K] {
-    return this.config.get(key, { infer: true });
-  }
-
-  get isProd(): boolean {
-    return this.get('NODE_ENV') === 'production';
-  }
-
-  get isTest(): boolean {
-    return this.get('NODE_ENV') === 'test';
-  }
-}
+// Re-export so existing imports of AppConfigService from this path keep working.
+// Leaf services should import from './config.service' directly to avoid triggering
+// ConfigModule.forRoot()'s env validation at import time (breaks isolated unit tests).
+export { AppConfigService } from './config.service';
 
 @Global()
 @Module({

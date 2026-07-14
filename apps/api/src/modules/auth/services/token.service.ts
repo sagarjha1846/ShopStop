@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
-import { AppConfigService } from '../../../config/config.module';
+import { AppConfigService } from '../../../config/config.service';
 import type { AccessTokenPayload, RefreshTokenPayload } from '../types';
 import type { User } from '@prisma/client';
 

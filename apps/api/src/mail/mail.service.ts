@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createTransport, type Transporter } from 'nodemailer';
-import { AppConfigService } from '../config/config.module';
+import { AppConfigService } from '../config/config.service';
 
 /**
  * Transactional email. Local dev → MailHog (SMTP :1025). Prod → SES/Resend via SMTP.

@@ -1,6 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
 import { TokenService } from './token.service';
-import type { AppConfigService } from '../../../config/config.module';
+import type { AppConfigService } from '../../../config/config.service';
 
 const config = {
   get: (key: string) => {

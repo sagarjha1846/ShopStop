@@ -5,7 +5,7 @@ import { AuthService, type AuthContext, type TokenPair } from './auth.service';
 import { LoginDto, OtpRequestDto, OtpVerifyDto, RegisterDto, VerifyEmailDto } from './dto/auth.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { AppConfigService } from '../../config/config.module';
+import { AppConfigService } from '../../config/config.service';
 import { AppError } from '../../common/errors/app-error';
 import type { AuthUser } from './types';
 

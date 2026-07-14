@@ -9,7 +9,8 @@ import { AppModule } from './app.module';
 import { AppConfigService } from './config/config.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody: true preserves the unparsed body (needed for payment webhook HMAC).
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   const config = app.get(AppConfigService);
   app.useLogger(app.get(Logger));
 

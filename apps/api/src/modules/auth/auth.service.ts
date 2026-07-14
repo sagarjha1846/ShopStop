@@ -3,7 +3,7 @@ import { authenticator } from 'otplib';
 import type { User } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
-import { AppConfigService } from '../../config/config.module';
+import { AppConfigService } from '../../config/config.service';
 import { MailService } from '../../mail/mail.service';
 import { AppError } from '../../common/errors/app-error';
 import { PasswordService } from './services/password.service';

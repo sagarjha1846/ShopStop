@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
-import { AppConfigService } from '../../../config/config.module';
+import { AppConfigService } from '../../../config/config.service';
 import { AppError } from '../../../common/errors/app-error';
 
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'video/mp4']);
