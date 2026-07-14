@@ -11,7 +11,8 @@
 //  - JSONB for flexible/rarely-queried structures; real columns for anything filtered.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {

@@ -1,0 +1,38 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# prisma
+apps/api/prisma/*.db
+
+# logs
+*.log
+logs/
+npm-debug.log*
+
+# test / coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# docker volumes (local)
+docker/data/

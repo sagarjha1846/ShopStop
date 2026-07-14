@@ -1,0 +1,70 @@
+# Local dev infrastructure for ShopStop.
+# App (api/web) run on host via pnpm during dev; this file provides backing services.
+# Prod overrides live in docker-compose.prod.yml (Phase 7).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shopstop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shopstop
+      POSTGRES_PASSWORD: shopstop
+      POSTGRES_DB: shopstop
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shopstop"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: shopstop-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Local email catcher (SMTP :1025, web UI :8025). Prod swaps for SES/Resend.
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: shopstop-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  # Local S3-compatible storage. Prod swaps for real S3/R2.
+  minio:
+    image: minio/minio:latest
+    container_name: shopstop-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: shopstop
+      MINIO_ROOT_PASSWORD: shopstop-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

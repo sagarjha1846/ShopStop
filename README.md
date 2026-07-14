@@ -22,7 +22,7 @@ This repository currently contains the **complete design package** (PRD → arch
 | 02 | [Personas & User Journeys](docs/02-personas-and-journeys.md) | 6 personas, end-to-end journeys |
 | 03 | [Feature List (MVP / Phase 2 / Future)](docs/03-features.md) | Every feature, phased and prioritized |
 | 04 | [Information Architecture & Wireframes](docs/04-ia-and-wireframes.md) | Sitemap, navigation, textual wireframes, design system |
-| 05 | [Database Schema (ERD)](docs/05-database-schema.md) | Entity model + narrative; code in [`prisma/schema.prisma`](prisma/schema.prisma) |
+| 05 | [Database Schema (ERD)](docs/05-database-schema.md) | Entity model + narrative; code in [`apps/api/prisma/schema.prisma`](apps/api/prisma/schema.prisma) |
 | 06 | [API Specification](docs/06-api-spec.md) | REST conventions, endpoints; contract in [`api/openapi.yaml`](api/openapi.yaml) |
 | 07 | [Backend Architecture](docs/07-backend-architecture.md) | NestJS modular monolith, queues, realtime |
 | 08 | [Frontend Architecture](docs/08-frontend-architecture.md) | Next.js App Router, state, performance |

@@ -1,6 +1,6 @@
 # 05 — Database Schema (ERD)
 
-The authoritative ERD is the Prisma schema: [`prisma/schema.prisma`](../prisma/schema.prisma). This document explains the model, the key decisions, and the diagram.
+The authoritative ERD is the Prisma schema: [`apps/api/prisma/schema.prisma`](../apps/api/prisma/schema.prisma). This document explains the model, the key decisions, and the diagram.
 
 ## Design principles
 - **PostgreSQL 16** single primary. One datastore for MVP (also powers search via FTS).

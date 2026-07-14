@@ -1,0 +1,39 @@
+{
+  "name": "shopstop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ShopStop — a trust-first universal marketplace (monorepo)",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "api": "pnpm --filter @shopstop/api",
+    "web": "pnpm --filter @shopstop/web",
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose up -d postgres redis mailhog minio",
+    "infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @shopstop/api db:migrate",
+    "db:seed": "pnpm --filter @shopstop/api db:seed"
+  },
+  "devDependencies": {
+    "prettier": "3.4.2",
+    "typescript": "5.7.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "@swc/core",
+      "argon2"
+    ]
+  }
+}
