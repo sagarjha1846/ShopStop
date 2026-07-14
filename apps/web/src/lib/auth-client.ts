@@ -57,3 +57,33 @@ export async function refresh(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Authenticated fetch with a single silent-refresh retry on 401. Returns parsed
+ * JSON; throws Error(message) on failure. Ensures a token exists first (via the
+ * refresh cookie) so a page reload keeps the session.
+ */
+export async function apiAuthed<T>(
+  path: string,
+  init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
+): Promise<T> {
+  if (!getAccessToken()) await refresh();
+  const call = () =>
+    fetch(`/api/v1${path}`, {
+      method: init.method ?? 'GET',
+      headers: {
+        'content-type': 'application/json',
+        ...(getAccessToken() ? { authorization: `Bearer ${getAccessToken()}` } : {}),
+        ...(init.headers ?? {}),
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      credentials: 'include',
+    });
+
+  let res = await call();
+  if (res.status === 401 && (await refresh())) res = await call();
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error?.message ?? 'Request failed');
+  return (res.status === 204 ? undefined : data) as T;
+}

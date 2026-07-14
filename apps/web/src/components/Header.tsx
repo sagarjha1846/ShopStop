@@ -20,6 +20,9 @@ export function Header() {
           <LinkButton href="/sell" variant="primary" className="hidden sm:inline-flex">
             Sell
           </LinkButton>
+          <LinkButton href="/dashboard" variant="ghost" className="hidden sm:inline-flex">
+            Dashboard
+          </LinkButton>
           <LinkButton href="/login" variant="ghost">
             Sign in
           </LinkButton>
