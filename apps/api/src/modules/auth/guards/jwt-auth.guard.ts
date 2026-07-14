@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { IS_OPTIONAL_AUTH_KEY } from '../decorators/optional-auth.decorator';
 import { TokenService } from '../services/token.service';
 import { AppError } from '../../../common/errors/app-error';
 import type { AuthUser } from '../types';
@@ -25,9 +26,17 @@ export class JwtAuthGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
+    const isOptional = this.reflector.getAllAndOverride<boolean>(IS_OPTIONAL_AUTH_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
     const req = context.switchToHttp().getRequest<Request & { user?: AuthUser }>();
     const token = this.extractToken(req);
-    if (!token) throw new AppError('UNAUTHENTICATED', 'Missing access token');
+    if (!token) {
+      if (isOptional) return true;
+      throw new AppError('UNAUTHENTICATED', 'Missing access token');
+    }
 
     try {
       const payload = await this.tokens.verifyAccess(token);
@@ -40,6 +49,7 @@ export class JwtAuthGuard implements CanActivate {
       };
       return true;
     } catch {
+      if (isOptional) return true; // proceed as guest on a bad token
       throw new AppError('UNAUTHENTICATED', 'Invalid or expired access token');
     }
   }

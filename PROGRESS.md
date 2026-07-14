@@ -26,11 +26,14 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [~] MFA (TOTP) verify-on-login done; enrollment endpoint + Google OAuth pending
 - [x] Auth unit tests (password + token/rotation); integration/e2e pending Phase 7
 
-## Phase 3 — Catalog & listings
-- [ ] Categories (data-driven attribute schema) endpoints
-- [ ] Listings CRUD + state machine + attribute validation vs category schema
-- [ ] Media signed-upload URL + async scan stub
-- [ ] Search (Postgres FTS + trigram) + autocomplete + filters
+## Phase 3 — Catalog & listings  ✅ verified end-to-end
+- [x] Categories (data-driven attribute schema) endpoint + cached tree
+- [x] Listings CRUD + seller state machine + **attribute validation vs category schema**
+- [x] Risk-gated publish (ACTIVE vs PENDING_REVIEW) via rules risk engine + FraudEvent
+- [x] ABAC ownership on update/pause/delete (verified 403 for non-owner)
+- [x] Media signed-upload URL (presigned S3/MinIO) + content-type/size limits
+- [x] Search (Postgres FTS ranked) + filters (price/category/condition/verified/rating) + ILIKE autocomplete
+- [~] Async media-scan worker → Phase 4 (BullMQ); variants CRUD → later
 
 ## Phase 4 — Commerce
 - [ ] Orders + state machine + timeline
@@ -62,3 +65,9 @@ Design package (docs/) is complete; this tracks **implementation**.
   auth (register/login/OTP/refresh-rotation) built & **verified against live Postgres+Redis**.
   Fixed a real reuse-detection bug (identical rotated tokens → added jti nonce). CI + eslint added.
   9 unit tests green. Next: catalog (categories + listings + attribute validation).
+- S3: Catalog module — categories (attribute schemas), listings (CRUD + state machine +
+  attribute validation + ABAC), rules risk engine gating publish, media presigned uploads,
+  Postgres FTS search + filters + autocomplete. Verified live: attribute 422, risk hold of
+  unverified/high-value + prohibited-keyword listings, ABAC 403s, FTS + autocomplete hits.
+  Fixed 2 real SQL bugs (deleted_at column, DISTINCT/ORDER BY). 16 unit tests green.
+  Next: Phase 4 commerce — orders + payments (Razorpay, idempotent webhook) + messaging.
