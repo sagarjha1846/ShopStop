@@ -59,10 +59,12 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Verified live: home/search/listing render 200 with seeded data; `next build` clean (8 routes)
 
 ## Phase 7 — Hardening & delivery
-- [ ] Test suites (unit/integration/e2e) + coverage gate
-- [ ] Security scans in CI (CodeQL/Semgrep, deps, Trivy, secret scan)
+- [x] Test suites: 27 unit + 2 black-box E2E suites (37 API checks); CI runs them
+- [~] Security scans in CI (dep audit present; CodeQL/Semgrep/Trivy/gitleaks → to add)
 - [ ] Observability wiring (metrics, Sentry stub)
-- [ ] Deploy config (compose.prod, runbooks)
+- [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
+      Caddy edge (auto-HTTPS + security headers), runtime migrate-on-boot, .dockerignore
+- [x] SessionStart hook (auto-provision Postgres/Redis/.env/deps/migrate/seed)
 
 ---
 ### Session log

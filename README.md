@@ -4,7 +4,46 @@
 
 ShopStop is a category-agnostic, peer-to-peer marketplace (think Amazon × eBay × OLX × Facebook Marketplace) built for modern users and optimized for **low infrastructure cost**. The platform never owns inventory. It is a **trusted facilitator** between buyers and sellers, differentiated by an identity + fraud + dispute **trust layer** that is hard to copy and compounds over time.
 
-This repository currently contains the **complete design package** (PRD → architecture → security → cost → scaling). It is written to be executed by a small team on a limited budget, and to survive a VAPT (Vulnerability Assessment & Penetration Test).
+This repository contains **both the complete design package** (PRD → architecture → security → cost → scaling) **and a working implementation**: a NestJS modular-monolith API and a Next.js web app, verified end-to-end against live Postgres + Redis. It is written to be executed by a small team on a limited budget, and to survive a VAPT (Vulnerability Assessment & Penetration Test).
+
+## Running locally
+
+```bash
+pnpm install
+# In web sessions the SessionStart hook provisions Postgres/Redis/.env/migrate/seed.
+# Otherwise: start Postgres + Redis, then:
+cp .env.example .env
+pnpm --filter @shopstop/api db:migrate:deploy && pnpm --filter @shopstop/api db:seed
+pnpm --filter @shopstop/api dev      # API on :4000  (docs at /api/docs)
+pnpm --filter @shopstop/web dev      # Web on :3000
+```
+
+Demo admin seeded in dev: `admin@shopstop.local` / `AdminPass123!`. Black-box flow
+tests live in [`apps/api/test/e2e`](apps/api/test/e2e).
+
+## What's built (MVP, verified)
+
+- **Auth**: email/password (Argon2id), phone OTP, JWT access + rotating refresh with
+  reuse detection, RBAC + ABAC, MFA-at-login.
+- **Catalog**: data-driven categories (per-category attribute schemas), listings with
+  attribute validation + seller state machine, Postgres FTS search + autocomplete,
+  presigned media uploads.
+- **Commerce**: buyer↔seller chat with structured offers, orders with an actor-aware
+  state machine + inventory, Razorpay payments (idempotent HMAC-verified webhook →
+  ledger → fulfilment), verified-purchase reviews.
+- **Trust & safety** (the differentiator): rules risk engine gating publish, prioritized
+  moderation + fraud queue, hash-chained tamper-evident audit log, disputes, public
+  trust profiles.
+- **Web**: home / search / listing / profile (SSR + SEO), auth, sell wizard, dashboard —
+  light/dark, responsive.
+
+See [PROGRESS.md](PROGRESS.md) for the live build checklist.
+
+## Deploy
+
+Containerized single-host stack (docs/13): `docker compose -f docker-compose.prod.yml up -d --build`
+builds the API + web images (multi-stage), runs Redis, and puts Caddy in front for
+auto-HTTPS + security headers. Bring managed Postgres (and Redis) as you scale.
 
 ---
 
@@ -69,9 +108,16 @@ Next.js (Vercel/Edge)  ──►  NestJS modular monolith (single VPS, Docker Co
 
 Full rationale, monthly costs, and scaling points: [docs/16-cost-estimation.md](docs/16-cost-estimation.md).
 
-## Status
+## Repository layout
 
-This is the **design deliverable**. Application scaffolding (NestJS app, Next.js app, migrations, CI workflow) is the natural next step and can be generated from these documents — see [docs/03-features.md](docs/03-features.md) for the MVP cut line and [docs/13-devops-and-deployment.md](docs/13-devops-and-deployment.md) for the delivery pipeline.
+```
+apps/api        NestJS modular monolith (auth, catalog, commerce, trust & safety)
+apps/web        Next.js App Router web app
+docs/           the 18-part design package (01–18)
+api/openapi.yaml  REST contract
+.github/        CI workflow
+.claude/        SessionStart hook (auto-provisions the dev environment)
+```
 
 ## License / Legal
 

@@ -1,0 +1,29 @@
+# Edge proxy for ShopStop (docs/11, docs/13). Auto-HTTPS via Let's Encrypt.
+# Replace shopstop.example with your domain and set an ops email for ACME.
+{
+	email ops@shopstop.example
+}
+
+shopstop.example {
+	encode gzip zstd
+
+	# Security headers (complement the app's own; see docs/11).
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(self), camera=(), microphone=()"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	# API + realtime to the backend; everything else to Next.
+	@api path /api/*
+	handle @api {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Emit a self-contained server bundle for a small production Docker image.
+  output: 'standalone',
   // Proxy /api/* to the backend during dev so the browser and SSR share one origin
   // (keeps cookies first-party and avoids CORS in development).
   async rewrites() {

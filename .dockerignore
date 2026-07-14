@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/.next
+**/out
+**/coverage
+**/.turbo
+.git
+.github
+docs
+**/*.md
+**/.env
+**/.env.*
+!**/.env.example
+docker/data
+**/*.log
