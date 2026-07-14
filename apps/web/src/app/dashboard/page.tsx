@@ -127,7 +127,12 @@ export default function DashboardPage() {
                     {o.payment?.status ? ` · ${o.payment.status.toLowerCase()}` : ''}
                   </div>
                 </div>
-                <Badge tone={STATUS_TONE[o.status] ?? 'muted'}>{o.status}</Badge>
+                <div className="flex items-center gap-3">
+                  <Badge tone={STATUS_TONE[o.status] ?? 'muted'}>{o.status}</Badge>
+                  <Link href={`/orders/${o.id}`} className="text-sm text-brand hover:underline">
+                    Details →
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>

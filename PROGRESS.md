@@ -55,8 +55,10 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] API client (SSR direct / browser proxy) + client auth (login/register/refresh, in-mem token)
 - [x] Home (SSR + revalidate), Search (live FTS), Listing detail (SSR + JSON-LD + trust panel)
 - [x] Sell page (auth-gated, data-driven category attribute form → risk-checked publish)
-- [~] Dashboards (buyer/seller), messages UI, admin console, profile page → next
-- [x] Verified live: home/search/listing render 200 with seeded data; `next build` clean (8 routes)
+- [x] Buyer/seller dashboard, public profile (+reviews), messages/chat (offers accept/decline),
+      order detail (timeline + role-aware transitions + pay)
+- [~] Admin console UI (moderation queue) → optional; API + RBAC already verified
+- [x] Verified live: SSR pages render with seeded data; all client pages 200; next build clean (11 routes)
 
 ## Phase 7 — Hardening & delivery
 - [x] Test suites: 27 unit + 2 black-box E2E suites (37 API checks); CI runs them
