@@ -59,9 +59,65 @@ jobs:
       - name: Build
         run: pnpm -r build
 
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shopstop
+          POSTGRES_PASSWORD: shopstop
+          POSTGRES_DB: shopstop
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U shopstop"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://shopstop:shopstop@localhost:5432/shopstop?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-000000000000000
+      JWT_REFRESH_SECRET: ci-refresh-secret-00000000000000
+      OTP_DEV_LOG: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migrate + seed
+        working-directory: apps/api
+        run: |
+          pnpm exec prisma generate
+          pnpm exec prisma migrate deploy
+          NODE_ENV=development pnpm exec ts-node --transpile-only prisma/seed.ts
+      - name: Build + start API
+        working-directory: apps/api
+        run: |
+          pnpm build
+          node dist/main.js &
+          for i in $(seq 1 30); do
+            curl -sf localhost:4000/api/v1/health/ready && break || sleep 1
+          done
+      - name: Run E2E flows
+        working-directory: apps/api
+        run: |
+          node test/e2e/commerce.e2e.mjs
+          node test/e2e/trust.e2e.mjs
+
   security:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       security-events: write
     steps:
       - uses: actions/checkout@v4
@@ -70,5 +126,13 @@ jobs:
           corepack enable
           pnpm install --frozen-lockfile
           pnpm audit --audit-level high || true # report, do not block yet
-      # Phase 7 adds: CodeQL/Semgrep (SAST), Trivy (container/image), gitleaks (secrets),
-      # and OWASP ZAP (DAST) against an ephemeral stack. See docs/13 + docs/15.
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+      - name: Static analysis (Semgrep)
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/typescript p/nodejsscan p/owasp-top-ten
+        continue-on-error: true
+      # Phase 7+ also adds: Trivy (container image scan) once images publish, and
+      # OWASP ZAP (DAST) against the ephemeral e2e stack. See docs/13 + docs/15.
