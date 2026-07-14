@@ -57,8 +57,9 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Sell page (auth-gated, data-driven category attribute form → risk-checked publish)
 - [x] Buyer/seller dashboard, public profile (+reviews), messages/chat (offers accept/decline),
       order detail (timeline + role-aware transitions + pay)
-- [~] Admin console UI (moderation queue) → optional; API + RBAC already verified
-- [x] Verified live: SSR pages render with seeded data; all client pages 200; next build clean (11 routes)
+- [x] Admin console UI: fraud queue + reports + disputes, approve/reject actions (RBAC-gated)
+- [x] Verified live: SSR pages render with seeded data; all client pages 200; next build clean (12 routes)
+- [x] Browser smoke (Chromium): register→cookie→sell→create→detail→theme 7/7; admin console loads live queue
 
 ## Phase 7 — Hardening & delivery
 - [x] Test suites: 27 unit + 2 black-box E2E suites (37 API checks); CI runs them
