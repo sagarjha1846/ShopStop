@@ -2,6 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 
+/** One line of the explainable trust breakdown shown on a public profile. */
+export interface TrustContribution {
+  key: string;
+  label: string;
+  points: number;
+}
+
 export interface PublicProfile {
   id: string;
   handle: string;
@@ -10,12 +17,37 @@ export interface PublicProfile {
   avatarUrl: string | null;
   memberSince: Date;
   trustScore: number;
+  /** Positive trust contributions, most impactful first. Internal risk penalties are withheld. */
+  trustFactors: TrustContribution[];
   badges: string[];
   ratingAvg: number;
   ratingCount: number;
   completedSales: number;
   responseMins: number | null;
   followerCount: number;
+}
+
+// Public-facing labels for the constructive factors. Penalty factors
+// (`fraud`, `lostDisputes`) are internal risk signals and never surfaced.
+const PUBLIC_FACTOR_LABELS: Record<string, string> = {
+  emailVerified: 'Email verified',
+  phoneVerified: 'Phone verified',
+  identityVerified: 'Government ID verified',
+  businessVerified: 'Business verified',
+  completedSales: 'Completed sales',
+  rating: 'Buyer ratings',
+  tenure: 'Account longevity',
+};
+
+/** Turn the stored factor JSON into a public, positive-only, sorted breakdown. */
+function publicTrustFactors(factors: unknown): TrustContribution[] {
+  if (!factors || typeof factors !== 'object') return [];
+  const out: TrustContribution[] = [];
+  for (const [key, label] of Object.entries(PUBLIC_FACTOR_LABELS)) {
+    const points = (factors as Record<string, unknown>)[key];
+    if (typeof points === 'number' && points > 0) out.push({ key, label, points });
+  }
+  return out.sort((a, b) => b.points - a.points);
 }
 
 @Injectable()
@@ -56,6 +88,7 @@ export class UsersService {
       avatarUrl: profile.avatarUrl,
       memberSince: profile.memberSince,
       trustScore: profile.user.trustScore?.score ?? 0,
+      trustFactors: publicTrustFactors(profile.user.trustScore?.factors),
       badges,
       ratingAvg: profile.ratingAvg,
       ratingCount: profile.ratingCount,

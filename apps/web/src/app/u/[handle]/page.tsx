@@ -44,6 +44,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ handle
         displayName={profile.displayName}
         handle={profile.handle}
         trustScore={profile.trustScore}
+        trustFactors={profile.trustFactors}
         badges={profile.badges}
         ratingAvg={profile.ratingAvg}
         ratingCount={profile.ratingCount}

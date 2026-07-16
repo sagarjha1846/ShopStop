@@ -113,6 +113,12 @@ export interface Page<T> {
   nextCursor: string | null;
 }
 
+export interface TrustContribution {
+  key: string;
+  label: string;
+  points: number;
+}
+
 export interface PublicProfile {
   id: string;
   handle: string;
@@ -121,6 +127,7 @@ export interface PublicProfile {
   avatarUrl: string | null;
   memberSince: string;
   trustScore: number;
+  trustFactors: TrustContribution[];
   badges: string[];
   ratingAvg: number;
   ratingCount: number;

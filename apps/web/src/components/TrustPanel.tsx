@@ -1,4 +1,5 @@
 import { Badge } from './ui';
+import type { TrustContribution } from '@/lib/api';
 
 const BADGE_LABEL: Record<string, string> = {
   EMAIL: '✓ Email',
@@ -26,10 +27,29 @@ export function TrustScore({ score }: { score: number }) {
   return <Badge tone={tone}>Trust {score}</Badge>;
 }
 
+/** Explainable breakdown: shows *why* a seller earned their trust score (docs/10). */
+export function TrustBreakdown({ factors }: { factors: TrustContribution[] }) {
+  if (!factors?.length) return null;
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Why this score</div>
+      <ul className="space-y-1.5 text-sm">
+        {factors.map((f) => (
+          <li key={f.key} className="flex items-center justify-between gap-2">
+            <span>{f.label}</span>
+            <span className="font-medium text-success">+{f.points}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function SellerTrustPanel({
   displayName,
   handle,
   trustScore,
+  trustFactors,
   badges,
   ratingAvg,
   ratingCount,
@@ -40,6 +60,7 @@ export function SellerTrustPanel({
   displayName: string;
   handle: string;
   trustScore: number;
+  trustFactors?: TrustContribution[];
   badges: string[];
   ratingAvg: number;
   ratingCount: number;
@@ -77,6 +98,7 @@ export function SellerTrustPanel({
           <dd>{new Date(memberSince).getFullYear()}</dd>
         </div>
       </dl>
+      {trustFactors && <TrustBreakdown factors={trustFactors} />}
     </div>
   );
 }
