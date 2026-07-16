@@ -61,7 +61,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Disputes (open party-only/state-gated, admin resolve → refund/audit)
 - [x] Users public trust profile (score + badges, no PII) + follow
 - [x] BullMQ async worker (in-process): email off the request path (register 0.1s), retries+backoff
-- [~] Trust-score recompute worker (BullMQ) → reuses the same queue infra; counters inline for now
+- [x] Explainable trust-score recompute (0–100 from verification/rating/sales/tenure − disputes/fraud),
+      stored with per-factor breakdown; triggered on email/phone/ID verify, reviews, delivered orders — verified 5→15
 - [x] Notifications: persist + realtime push on order/message/offer events; web bell +
       /notifications page (live unread count) — verified 4/4
 

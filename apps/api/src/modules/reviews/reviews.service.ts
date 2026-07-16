@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { OrderStatus, type Review } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
+import { TrustScoreService } from '../trust/trust-score.service';
 import type { CreateReviewDto } from './dto/review.dto';
 
 const REVIEWABLE_STATUSES: OrderStatus[] = [
@@ -12,7 +13,10 @@ const REVIEWABLE_STATUSES: OrderStatus[] = [
 
 @Injectable()
 export class ReviewsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly trust: TrustScoreService,
+  ) {}
 
   /** A party reviews their counterparty for a completed order (verified purchase). */
   async create(authorId: string, dto: CreateReviewDto): Promise<Review> {
@@ -31,7 +35,7 @@ export class ReviewsService {
     });
     if (existing) throw AppError.conflict('You have already reviewed this order');
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const review = await tx.review.create({
         data: {
           orderId: order.id,
@@ -60,6 +64,9 @@ export class ReviewsService {
       });
       return review;
     });
+    // A new review changes the subject's reputation → recompute their trust score.
+    this.trust.recomputeAsync(subjectId);
+    return result;
   }
 
   async listForUser(userId: string): Promise<Review[]> {

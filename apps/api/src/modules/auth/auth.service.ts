@@ -11,6 +11,7 @@ import { TokenService } from './services/token.service';
 import { OtpService } from './services/otp.service';
 import { encryptSecret, decryptSecret } from '../../common/crypto/crypto.util';
 import { NotifyProducer } from '../../jobs/notify.producer';
+import { TrustScoreService } from '../trust/trust-score.service';
 import type { LoginDto, RegisterDto } from './dto/auth.dto';
 import type { AuthUser } from './types';
 
@@ -39,6 +40,7 @@ export class AuthService {
     private readonly tokens: TokenService,
     private readonly otp: OtpService,
     private readonly notify: NotifyProducer,
+    private readonly trust: TrustScoreService,
   ) {}
 
   // ---- Registration -------------------------------------------------------
@@ -183,6 +185,7 @@ export class AuthService {
       where: { id: userId },
       data: { phone, phoneVerifiedAt: new Date() },
     });
+    this.trust.recomputeAsync(userId); // verification raises the trust score
     return this.toAuthUser(user);
   }
 
@@ -225,6 +228,7 @@ export class AuthService {
       data: { emailVerifiedAt: new Date() },
     });
     await this.redis.del(`emailverify:${token}`);
+    this.trust.recomputeAsync(userId);
   }
 
   // ---- Helpers ------------------------------------------------------------

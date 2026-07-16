@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { TrustScoreService } from '../trust/trust-score.service';
 import { resolveTransition, type OrderAction, type OrderActor } from './order.state';
 import type { CreateOrderDto } from './dto/order.dto';
 
@@ -23,6 +24,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly coupons: CouponsService,
+    private readonly trust: TrustScoreService,
   ) {}
 
   async create(buyerId: string, dto: CreateOrderDto): Promise<Order> {
@@ -175,6 +177,9 @@ export class OrdersService {
     if ((nextStatus === OrderStatus.CANCELLED || nextStatus === OrderStatus.REJECTED) && order.couponId) {
       await this.coupons.release(order.couponId).catch(() => undefined);
     }
+
+    // A completed sale improves the seller's reputation → recompute trust score.
+    if (nextStatus === OrderStatus.DELIVERED) this.trust.recomputeAsync(order.sellerId);
 
     // Notify the counterparty (the party who did NOT trigger this transition).
     const recipient = actor === 'buyer' ? order.sellerId : order.buyerId;
