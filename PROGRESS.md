@@ -41,7 +41,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Payments adapter (Razorpay) + intent + idempotent HMAC-verified webhook + ledger
 - [x] Reviews (verified-purchase) + reputation recompute
 - [x] Messaging (threads, messages, structured offers accept/decline/counter)
-- [~] Socket.IO realtime gateway → deferred (REST verified; realtime is delivery layer)
+- [x] Socket.IO realtime gateway (JWT handshake, participant-checked rooms, live delivery,
+      Redis adapter for horizontal scale) + live web chat — verified 5/5
 
 ## Phase 5 — Trust & safety  ✅ verified end-to-end (13/13 E2E)
 - [x] Risk engine (rules) + FraudEvent gating publish (from Phase 3, exercised here)

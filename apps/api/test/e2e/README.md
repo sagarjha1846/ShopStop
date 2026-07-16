@@ -13,6 +13,8 @@ as executable documentation of the happy paths + guardrails.
 ```bash
 node test/e2e/commerce.e2e.mjs   # offers → order → payment webhook → fulfilment → review
 node test/e2e/trust.e2e.mjs      # risk hold → moderation queue (RBAC) → reject/approve → profile
+# realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
+node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
 Each prints PASS/FAIL per assertion and exits non-zero on any failure.
 
