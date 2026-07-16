@@ -52,7 +52,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Reports + moderation actions + prioritized queue (RBAC) + hash-chained audit log
 - [x] Disputes (open party-only/state-gated, admin resolve → refund/audit)
 - [x] Users public trust profile (score + badges, no PII) + follow
-- [~] Trust-score recompute worker (BullMQ) → Phase 7; counters updated inline for now
+- [x] BullMQ async worker (in-process): email off the request path (register 0.1s), retries+backoff
+- [~] Trust-score recompute worker (BullMQ) → reuses the same queue infra; counters inline for now
 - [x] Notifications: persist + realtime push on order/message/offer events; web bell +
       /notifications page (live unread count) — verified 4/4
 

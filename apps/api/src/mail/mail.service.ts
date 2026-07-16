@@ -32,12 +32,13 @@ export class MailService {
     }
   }
 
-  sendEmailVerification(to: string, token: string): Promise<void> {
+  /** Render the verification email (subject + html) without sending — the worker sends it. */
+  renderEmailVerification(to: string, token: string): { to: string; subject: string; html: string } {
     const url = `${this.config.get('WEB_BASE_URL')}/auth/verify?token=${token}`;
-    return this.send(
+    return {
       to,
-      'Verify your ShopStop email',
-      `<p>Welcome to ShopStop. Confirm your email:</p><p><a href="${url}">Verify email</a></p>`,
-    );
+      subject: 'Verify your ShopStop email',
+      html: `<p>Welcome to ShopStop. Confirm your email:</p><p><a href="${url}">Verify email</a></p>`,
+    };
   }
 }

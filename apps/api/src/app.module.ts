@@ -7,6 +7,7 @@ import { AppConfigModule } from './config/config.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { MailModule } from './mail/mail.module';
+import { JobsModule } from './jobs/jobs.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
@@ -61,6 +62,7 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     PrismaModule,
     RedisModule,
     MailModule,
+    JobsModule,
     AuditModule,
     MetricsModule,
     HealthModule,

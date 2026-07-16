@@ -10,6 +10,7 @@ import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
 import { OtpService } from './services/otp.service';
 import { encryptSecret, decryptSecret } from '../../common/crypto/crypto.util';
+import { NotifyProducer } from '../../jobs/notify.producer';
 import type { LoginDto, RegisterDto } from './dto/auth.dto';
 import type { AuthUser } from './types';
 
@@ -37,6 +38,7 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
     private readonly otp: OtpService,
+    private readonly notify: NotifyProducer,
   ) {}
 
   // ---- Registration -------------------------------------------------------
@@ -258,7 +260,8 @@ export class AuthService {
   private async sendEmailVerification(userId: string, email: string): Promise<void> {
     const token = this.tokens.randomToken();
     await this.redis.setEx(`emailverify:${token}`, userId, 60 * 60 * 24);
-    await this.mail.sendEmailVerification(email, token);
+    // Enqueue — keeps email off the registration request path (docs/07).
+    await this.notify.enqueueEmail(this.mail.renderEmailVerification(email, token));
   }
 
   private async generateHandle(seed: string): Promise<string> {
