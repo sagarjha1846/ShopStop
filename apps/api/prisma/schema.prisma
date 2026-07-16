@@ -77,6 +77,7 @@ model User {
   followedBy     Follow[]            @relation("Followee")
   following      Follow[]            @relation("Follower")
   consents       Consent[]
+  savedSearches  SavedSearch[]
 
   @@index([status])
   @@map("users")
@@ -214,7 +215,10 @@ model Listing {
   // discovery
   boostedUntil DateTime? @map("boosted_until")
   viewCount    Int       @default(0) @map("view_count")
-  // full-text search vector maintained by trigger/generated column (see migration)
+  // Generated tsvector FTS column (created by the listings_fts raw-SQL migration).
+  // Declared as Unsupported so Prisma migrate stops trying to drop it on drift;
+  // queried only via raw SQL in SearchService, never selected through the client.
+  searchVector Unsupported("tsvector")? @map("search_vector")
   publishedAt  DateTime? @map("published_at")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
@@ -814,6 +818,21 @@ model AuditLog {
   @@index([action])
   @@index([targetType, targetId])
   @@map("audit_logs")
+}
+
+// A buyer's saved search: stored query params re-runnable on demand (docs/03).
+// Alerts on new matches are a Phase 2 addition (a worker diffs results).
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  name      String
+  params    Json     @default("{}") // the SearchParams (q, filters) captured at save time
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_searches")
 }
 
 // Runtime feature flags / system config (admin-editable).

@@ -8,11 +8,19 @@ import { MediaService } from './media/media.service';
 import { MediaController } from './media/media.controller';
 import { SearchService } from './search/search.service';
 import { SearchController } from './search/search.controller';
+import { SavedSearchesService } from './saved-searches/saved-searches.service';
+import { SavedSearchesController } from './saved-searches/saved-searches.controller';
 
 @Module({
   imports: [TrustModule],
-  controllers: [CategoriesController, ListingsController, MediaController, SearchController],
-  providers: [CategoriesService, ListingsService, MediaService, SearchService],
+  controllers: [
+    CategoriesController,
+    ListingsController,
+    MediaController,
+    SearchController,
+    SavedSearchesController,
+  ],
+  providers: [CategoriesService, ListingsService, MediaService, SearchService, SavedSearchesService],
   exports: [CategoriesService, ListingsService],
 })
 export class CatalogModule {}
