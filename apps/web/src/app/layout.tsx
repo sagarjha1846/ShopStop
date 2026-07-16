@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import './globals.css';
 import { Header } from '@/components/Header';
+import { CookieConsent } from '@/components/CookieConsent';
 
 export const metadata: Metadata = {
   title: { default: 'ShopStop — Buy & sell anything, safely', template: '%s · ShopStop' },
@@ -24,15 +26,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="mx-auto max-w-6xl px-4 py-10 text-sm text-muted">
           <div className="border-t pt-6">
             ShopStop — trust-first marketplace ·{' '}
-            <a className="underline" href="/legal/terms">
+            <Link className="underline" href="/legal/terms">
               Terms
-            </a>{' '}
+            </Link>{' '}
             ·{' '}
-            <a className="underline" href="/legal/privacy">
+            <Link className="underline" href="/legal/privacy">
               Privacy
-            </a>
+            </Link>
           </div>
         </footer>
+        <CookieConsent />
       </body>
     </html>
   );

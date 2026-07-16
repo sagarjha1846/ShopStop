@@ -25,6 +25,7 @@ import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { AddressesModule } from './modules/addresses/addresses.module';
 import { CouponsModule } from './modules/coupons/coupons.module';
 import { SupportModule } from './modules/support/support.module';
+import { ConsentModule } from './modules/consent/consent.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -81,6 +82,7 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     AddressesModule,
     CouponsModule,
     SupportModule,
+    ConsentModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
