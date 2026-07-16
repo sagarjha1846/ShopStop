@@ -40,6 +40,7 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Search (Postgres FTS ranked) + filters (price/category/condition/verified/rating) + ILIKE autocomplete
 - [x] Async media-scan worker (BullMQ): scan on attach → scanStatus → REJECTED media hidden — verified
 - [x] Listing variants CRUD (add/list/update/delete, ABAC) + included in listing detail — verified
+- [x] Listing boost/promote: POST /listings/:id/boost -> sponsored top of browse (active-only, ABAC) — verified
 - [x] Saved searches: store+list+run(re-execute)+delete (new migration; FTS column declared Unsupported) — verified
 - [x] Wishlist: add/remove/has/list API + listing heart toggle + /wishlist page (verified)
 - [x] Address book: CRUD API (auto-default, default reassignment, ABAC) + /addresses page (verified)

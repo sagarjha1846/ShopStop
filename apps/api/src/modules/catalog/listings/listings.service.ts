@@ -251,17 +251,46 @@ export class ListingsService {
           ? { priceMinor: 'desc' }
           : { createdAt: 'desc' };
 
-    const items = await this.prisma.listing.findMany({
+    const mediaInclude = { media: { where: { scanStatus: { not: 'REJECTED' } as const }, orderBy: { sortOrder: 'asc' as const }, take: 1 } };
+
+    // Sponsored placement: on page 1 of the default browse feed, currently-active
+    // boosts appear on top. Only active boosts qualify (boostedUntil > now), so
+    // expired boosts never retain priority — no cleanup job required.
+    let boosted: Listing[] = [];
+    const boostedFeed = !query.cursor && !query.sort && !query.sellerId;
+    if (boostedFeed) {
+      boosted = await this.prisma.listing.findMany({
+        where: { ...where, boostedUntil: { gt: new Date() } },
+        orderBy: { boostedUntil: 'desc' },
+        take: 4,
+        include: mediaInclude,
+      });
+    }
+    const boostedIds = new Set(boosted.map((b) => b.id));
+
+    const rows = await this.prisma.listing.findMany({
       where,
       orderBy,
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      include: { media: { where: { scanStatus: { not: 'REJECTED' } }, orderBy: { sortOrder: 'asc' }, take: 1 } },
+      include: mediaInclude,
     });
 
-    const hasMore = items.length > limit;
-    const page = hasMore ? items.slice(0, limit) : items;
-    return { items: page, nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null };
+    const hasMore = rows.length > limit;
+    const regular = hasMore ? rows.slice(0, limit) : rows;
+    // nextCursor tracks the recency list (not the boosted prepend) so paging is stable.
+    const nextCursor = hasMore ? (regular[regular.length - 1]?.id ?? null) : null;
+    const items = [...boosted, ...regular.filter((r) => !boostedIds.has(r.id))].slice(0, limit);
+    return { items, nextCursor };
+  }
+
+  /** Feature a listing to the top of browse for N days (owner only). In prod this
+   *  is gated behind a boost payment (Phase 2); here it sets the window directly. */
+  async boost(sellerId: string, listingId: string, days: number): Promise<Listing> {
+    await this.ownedOrThrow(sellerId, listingId);
+    const until = new Date(Date.now() + Math.min(Math.max(days, 1), 30) * 86_400_000);
+    await this.prisma.listing.update({ where: { id: listingId }, data: { boostedUntil: until } });
+    return this.withMedia(listingId);
   }
 
   // ---- helpers ----
