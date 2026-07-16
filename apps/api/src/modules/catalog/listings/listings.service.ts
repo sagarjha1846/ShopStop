@@ -151,6 +151,55 @@ export class ListingsService {
     return this.withMedia(copy.id);
   }
 
+  // ---- variants (e.g. "Red / 128GB") ----
+
+  async addVariant(
+    sellerId: string,
+    listingId: string,
+    dto: { name: string; attributes?: Record<string, unknown>; priceMinor?: number; quantity?: number },
+  ): Promise<unknown> {
+    await this.ownedOrThrow(sellerId, listingId);
+    return this.prisma.listingVariant.create({
+      data: {
+        listingId,
+        name: dto.name.trim().slice(0, 80),
+        attributes: (dto.attributes ?? {}) as Prisma.InputJsonValue,
+        priceMinor: dto.priceMinor,
+        quantity: dto.quantity ?? 1,
+      },
+    });
+  }
+
+  async listVariants(listingId: string): Promise<unknown[]> {
+    return this.prisma.listingVariant.findMany({ where: { listingId }, orderBy: { name: 'asc' } });
+  }
+
+  async updateVariant(
+    sellerId: string,
+    listingId: string,
+    variantId: string,
+    dto: { name?: string; attributes?: Record<string, unknown>; priceMinor?: number; quantity?: number },
+  ): Promise<unknown> {
+    await this.ownedOrThrow(sellerId, listingId);
+    const variant = await this.prisma.listingVariant.findUnique({ where: { id: variantId } });
+    if (!variant || variant.listingId !== listingId) throw AppError.notFound('Variant');
+    return this.prisma.listingVariant.update({
+      where: { id: variantId },
+      data: {
+        name: dto.name?.trim(),
+        attributes: dto.attributes ? (dto.attributes as Prisma.InputJsonValue) : undefined,
+        priceMinor: dto.priceMinor,
+        quantity: dto.quantity,
+      },
+    });
+  }
+
+  async deleteVariant(sellerId: string, listingId: string, variantId: string): Promise<void> {
+    await this.ownedOrThrow(sellerId, listingId);
+    const res = await this.prisma.listingVariant.deleteMany({ where: { id: variantId, listingId } });
+    if (res.count === 0) throw AppError.notFound('Variant');
+  }
+
   async softDelete(sellerId: string, listingId: string): Promise<void> {
     const listing = await this.ownedOrThrow(sellerId, listingId);
     await this.prisma.listing.update({
@@ -165,6 +214,7 @@ export class ListingsService {
       where: { id: listingId, deletedAt: null },
       include: {
         media: { where: { scanStatus: { not: 'REJECTED' } }, orderBy: { sortOrder: 'asc' } },
+        variants: { orderBy: { name: 'asc' } },
         seller: { select: { profile: true, trustScore: true, emailVerifiedAt: true, phoneVerifiedAt: true } },
         category: { select: { id: true, slug: true, name: true } },
       },

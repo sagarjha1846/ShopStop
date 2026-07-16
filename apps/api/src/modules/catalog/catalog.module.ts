@@ -4,6 +4,7 @@ import { CategoriesService } from './categories/categories.service';
 import { CategoriesController } from './categories/categories.controller';
 import { ListingsService } from './listings/listings.service';
 import { ListingsController } from './listings/listings.controller';
+import { VariantsController } from './listings/variants.controller';
 import { MediaService } from './media/media.service';
 import { MediaController } from './media/media.controller';
 import { SearchService } from './search/search.service';
@@ -16,6 +17,7 @@ import { SavedSearchesController } from './saved-searches/saved-searches.control
   controllers: [
     CategoriesController,
     ListingsController,
+    VariantsController,
     MediaController,
     SearchController,
     SavedSearchesController,
