@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { MessageKind, OfferStatus, OrderStatus, type Order, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
+import { NotificationsService } from '../notifications/notifications.service';
 import { resolveTransition, type OrderAction, type OrderActor } from './order.state';
 import type { CreateOrderDto } from './dto/order.dto';
 
@@ -17,7 +18,10 @@ export class OrdersService {
   // Platform take-rate in basis points. MVP: small facilitation fee; tune per docs/18.
   private static readonly PLATFORM_FEE_BPS = 200; // 2%
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(buyerId: string, dto: CreateOrderDto): Promise<Order> {
     const listing = await this.prisma.listing.findFirst({
@@ -115,8 +119,8 @@ export class OrdersService {
       { status: nextStatus, actor, at: new Date().toISOString(), note },
     ];
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.order.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.order.update({
         where: { id: order.id },
         data: {
           status: nextStatus,
@@ -145,8 +149,22 @@ export class OrdersService {
           data: { quantity: { increment: order.quantity }, status: 'ACTIVE' },
         });
       }
-      return updated;
+      return row;
     });
+
+    // Notify the counterparty (the party who did NOT trigger this transition).
+    const recipient = actor === 'buyer' ? order.sellerId : order.buyerId;
+    await this.notifications
+      .notify({
+        userId: recipient,
+        type: 'order.update',
+        title: `Order ${nextStatus.toLowerCase()}`,
+        body: note ?? undefined,
+        data: { orderId: order.id, status: nextStatus },
+      })
+      .catch(() => undefined);
+
+    return updated;
   }
 
   private actorFor(order: Order, userId: string): OrderActor {

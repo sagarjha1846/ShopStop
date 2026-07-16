@@ -3,6 +3,7 @@ import { MessageKind, OfferStatus, type Message, type Thread } from '@prisma/cli
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { SendMessageDto, OfferActionDto } from './dto/message.dto';
 
 export interface AcceptedOffer {
@@ -15,6 +16,7 @@ export class MessagingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** Push a freshly-created message to connected participants (realtime delivery). */
@@ -117,6 +119,20 @@ export class MessagingService {
     });
     await this.prisma.thread.update({ where: { id: threadId }, data: { lastMessageAt: new Date() } });
     await this.broadcast(threadId, message);
+
+    // Notify the other participant(s) — inbox + push even if they're offline.
+    const ids = await this.participantIds(threadId);
+    for (const uid of ids.filter((u) => u !== senderId)) {
+      await this.notifications
+        .notify({
+          userId: uid,
+          type: kind === MessageKind.OFFER ? 'offer.received' : 'message.new',
+          title: kind === MessageKind.OFFER ? `New offer: ${this.fmt(dto.offerMinor ?? 0)}` : 'New message',
+          body: kind === MessageKind.TEXT ? dto.body?.slice(0, 120) : undefined,
+          data: { threadId },
+        })
+        .catch(() => undefined);
+    }
     return message;
   }
 
