@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { AppConfigService } from './config/config.module';
+import { RedisIoAdapter } from './realtime/redis-io.adapter';
 
 async function bootstrap(): Promise<void> {
   // rawBody: true preserves the unparsed body (needed for payment webhook HMAC).
@@ -44,6 +45,11 @@ async function bootstrap(): Promise<void> {
       errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
     }),
   );
+
+  // Socket.IO with a Redis adapter (horizontal fan-out; single-instance if Redis down).
+  const wsAdapter = new RedisIoAdapter(app);
+  await wsAdapter.connect();
+  app.useWebSocketAdapter(wsAdapter);
 
   app.enableShutdownHooks();
 

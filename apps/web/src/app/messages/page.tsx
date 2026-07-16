@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import type { Socket } from 'socket.io-client';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
+import { getSocket, closeSocket } from '@/lib/socket';
 import { formatMoney, timeAgo } from '@/lib/format';
 import { Button } from '@/components/ui';
 
@@ -15,6 +17,7 @@ interface Thread {
 }
 interface Message {
   id: string;
+  threadId: string;
   senderId: string;
   kind: string;
   body: string | null;
@@ -32,11 +35,47 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [offer, setOffer] = useState('');
+  const socketRef = useRef<Socket | null>(null);
+  const activeRef = useRef<string | null>(null);
+  activeRef.current = active;
 
   const loadMessages = useCallback(async (threadId: string) => {
     const res = await apiAuthed<{ items: Message[] }>(`/threads/${threadId}/messages?limit=50`);
     setMessages([...res.items].reverse());
   }, []);
+
+  // Realtime: append live messages for the open thread; refresh list ordering.
+  useEffect(() => {
+    if (!authed) return;
+    const s = getSocket();
+    socketRef.current = s;
+    const onNew = (m: Message) => {
+      if (m.threadId === activeRef.current) {
+        setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+      }
+    };
+    const onThreadUpdated = async () => {
+      try {
+        setThreads(await apiAuthed<Thread[]>('/threads'));
+      } catch {
+        /* ignore */
+      }
+    };
+    const onConnect = () => {
+      if (activeRef.current) s.emit('thread:join', activeRef.current);
+    };
+    s.on('message:new', onNew);
+    s.on('thread:updated', onThreadUpdated);
+    s.on('connect', onConnect);
+    if (s.connected) onConnect();
+    return () => {
+      s.off('message:new', onNew);
+      s.off('thread:updated', onThreadUpdated);
+      s.off('connect', onConnect);
+    };
+  }, [authed]);
+
+  useEffect(() => () => closeSocket(), []);
 
   useEffect(() => {
     (async () => {
@@ -62,6 +101,7 @@ export default function MessagesPage() {
 
   async function open(id: string) {
     setActive(id);
+    socketRef.current?.emit('thread:join', id);
     await loadMessages(id);
   }
   async function send() {

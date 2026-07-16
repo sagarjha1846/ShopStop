@@ -36,3 +36,6 @@ playwright-report/
 
 # docker volumes (local)
 docker/data/
+
+# redis dump written when redis runs from the repo dir
+dump.rdb
