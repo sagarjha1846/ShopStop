@@ -5,6 +5,7 @@ import { AppError } from '../../../common/errors/app-error';
 import { CategoriesService } from '../categories/categories.service';
 import { validateAttributes } from '../attribute-validator';
 import { RiskService } from '../../trust/risk.service';
+import { MediaScanProducer } from '../../../jobs/media-scan.producer';
 import { assertSellerTransition, isPubliclyVisible, type SellerListingAction } from './listing.state';
 import type { CreateListingDto, UpdateListingDto } from './dto/listing.dto';
 
@@ -22,6 +23,7 @@ export class ListingsService {
     private readonly prisma: PrismaService,
     private readonly categories: CategoriesService,
     private readonly risk: RiskService,
+    private readonly mediaScan: MediaScanProducer,
   ) {}
 
   async create(sellerId: string, dto: CreateListingDto): Promise<Listing> {
@@ -162,7 +164,7 @@ export class ListingsService {
     const listing = await this.prisma.listing.findFirst({
       where: { id: listingId, deletedAt: null },
       include: {
-        media: { orderBy: { sortOrder: 'asc' } },
+        media: { where: { scanStatus: { not: 'REJECTED' } }, orderBy: { sortOrder: 'asc' } },
         seller: { select: { profile: true, trustScore: true, emailVerifiedAt: true, phoneVerifiedAt: true } },
         category: { select: { id: true, slug: true, name: true } },
       },
@@ -204,7 +206,7 @@ export class ListingsService {
       orderBy,
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
-      include: { media: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+      include: { media: { where: { scanStatus: { not: 'REJECTED' } }, orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
 
     const hasMore = items.length > limit;
@@ -230,9 +232,11 @@ export class ListingsService {
 
   private async attachMedia(listingId: string, mediaKeys?: string[]): Promise<void> {
     if (!mediaKeys?.length) return;
-    await this.prisma.media.createMany({
-      data: mediaKeys.slice(0, 12).map((storageKey, i) => ({ listingId, storageKey, sortOrder: i })),
-    });
+    // Create each media row PENDING and enqueue an async scan (docs/09 #8).
+    for (const [i, storageKey] of mediaKeys.slice(0, 12).entries()) {
+      const media = await this.prisma.media.create({ data: { listingId, storageKey, sortOrder: i } });
+      await this.mediaScan.enqueue({ mediaId: media.id, storageKey }).catch(() => undefined);
+    }
   }
 
   private normalizeTags(tags?: string[]): string[] {

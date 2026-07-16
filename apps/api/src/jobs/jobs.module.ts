@@ -4,6 +4,8 @@ import { AppConfigService } from '../config/config.service';
 import { AppConfigModule } from '../config/config.module';
 import { NotifyProducer, NOTIFY_QUEUE } from './notify.producer';
 import { NotifyProcessor } from './notify.processor';
+import { MediaScanProducer, MEDIA_SCAN_QUEUE } from './media-scan.producer';
+import { MediaScanProcessor } from './media-scan.processor';
 
 /**
  * BullMQ wiring. Connection derived from REDIS_URL. The queue + in-process worker
@@ -25,9 +27,9 @@ import { NotifyProcessor } from './notify.processor';
         };
       },
     }),
-    BullModule.registerQueue({ name: NOTIFY_QUEUE }),
+    BullModule.registerQueue({ name: NOTIFY_QUEUE }, { name: MEDIA_SCAN_QUEUE }),
   ],
-  providers: [NotifyProducer, NotifyProcessor],
-  exports: [NotifyProducer],
+  providers: [NotifyProducer, NotifyProcessor, MediaScanProducer, MediaScanProcessor],
+  exports: [NotifyProducer, MediaScanProducer],
 })
 export class JobsModule {}
