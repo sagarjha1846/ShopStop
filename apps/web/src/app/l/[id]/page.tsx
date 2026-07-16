@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { api, ApiError, type Listing } from '@/lib/api';
 import { formatMoney, mediaUrl } from '@/lib/format';
 import { SellerTrustPanel } from '@/components/TrustPanel';
+import { WishlistButton } from '@/components/WishlistButton';
 import { Badge, LinkButton } from '@/components/ui';
 
 async function getListing(id: string): Promise<Listing | null> {
@@ -115,6 +116,7 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
             <LinkButton href={`/login?next=/l/${listing.id}`} variant="outline">
               Chat with seller
             </LinkButton>
+            <WishlistButton listingId={listing.id} />
           </div>
         </div>
 

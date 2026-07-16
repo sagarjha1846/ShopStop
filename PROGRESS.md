@@ -34,6 +34,7 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Media signed-upload URL (presigned S3/MinIO) + content-type/size limits
 - [x] Search (Postgres FTS ranked) + filters (price/category/condition/verified/rating) + ILIKE autocomplete
 - [~] Async media-scan worker → Phase 4 (BullMQ); variants CRUD → later
+- [x] Wishlist: add/remove/has/list API + listing heart toggle + /wishlist page (verified)
 
 ## Phase 4 — Commerce  ✅ verified end-to-end (24/24 E2E)
 - [x] Idempotency interceptor (Redis: fingerprint + in-flight lock + cache-before-emit)
