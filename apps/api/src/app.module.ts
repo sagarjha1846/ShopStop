@@ -8,6 +8,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { MailModule } from './mail/mail.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -57,6 +59,7 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     RedisModule,
     MailModule,
     AuditModule,
+    MetricsModule,
     HealthModule,
     AuthModule,
     CatalogModule,
@@ -71,6 +74,7 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_INTERCEPTOR, useClass: MetricsInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],

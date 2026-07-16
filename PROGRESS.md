@@ -64,8 +64,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 
 ## Phase 7 — Hardening & delivery
 - [x] Test suites: 27 unit + 2 black-box E2E suites (37 API checks); CI runs them
-- [~] Security scans in CI (dep audit present; CodeQL/Semgrep/Trivy/gitleaks → to add)
-- [ ] Observability wiring (metrics, Sentry stub)
+- [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
+- [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
       Caddy edge (auto-HTTPS + security headers), runtime migrate-on-boot, .dockerignore
 - [x] SessionStart hook (auto-provision Postgres/Redis/.env/deps/migrate/seed)
