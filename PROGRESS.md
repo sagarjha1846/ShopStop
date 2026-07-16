@@ -47,7 +47,7 @@ Design package (docs/) is complete; this tracks **implementation**.
 ## Phase 4 — Commerce  ✅ verified end-to-end (24/24 E2E)
 - [x] Idempotency interceptor (Redis: fingerprint + in-flight lock + cache-before-emit)
 - [x] Orders + actor-aware state machine + timeline + inventory (SOLD/restock)
-- [x] Payments adapter (Razorpay) + intent + idempotent HMAC-verified webhook + ledger
+- [x] Payments: Razorpay + Cashfree behind one provider port (per-provider webhook HMAC), idempotent capture + ledger — verified
 - [x] Reviews (verified-purchase) + reputation recompute
 - [x] Coupons: admin/seller creation + checkout discount (atomic redemption limit, release-on-cancel) — verified 6/6
 - [x] Messaging (threads, messages, structured offers accept/decline/counter)

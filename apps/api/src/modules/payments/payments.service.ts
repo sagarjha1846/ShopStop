@@ -10,7 +10,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { OrdersService } from '../orders/orders.service';
 import { RazorpayProvider } from './provider/razorpay.provider';
-import type { IPaymentProvider } from './provider/payment-provider';
+import { CashfreeProvider } from './provider/cashfree.provider';
+import type { IPaymentProvider, WebhookHeaders } from './provider/payment-provider';
 
 export interface PaymentIntent {
   provider: ProviderEnum;
@@ -29,8 +30,12 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
     razorpay: RazorpayProvider,
+    cashfree: CashfreeProvider,
   ) {
-    this.providers = new Map([[razorpay.key, razorpay]]);
+    this.providers = new Map<ProviderEnum, IPaymentProvider>([
+      [razorpay.key, razorpay],
+      [cashfree.key, cashfree],
+    ]);
   }
 
   async createIntent(
@@ -79,9 +84,9 @@ export class PaymentsService {
    * payment reprocessed is a no-op), records a ledger Transaction, and advances the
    * order to ACCEPTED. Heavy follow-on work (receipts, payouts) is enqueued in Phase 4+.
    */
-  async handleWebhook(providerKey: string, rawBody: Buffer, signature?: string): Promise<{ received: true }> {
+  async handleWebhook(providerKey: string, rawBody: Buffer, headers: WebhookHeaders): Promise<{ received: true }> {
     const provider = this.providerOrThrow(this.parseProvider(providerKey));
-    const event = provider.verifyAndParseWebhook(rawBody, signature);
+    const event = provider.verifyAndParseWebhook(rawBody, headers);
 
     if (event.type === 'payment.captured') {
       await this.onCaptured(event.providerOrderId, event.providerPaymentId, event.amountMinor, event.method);

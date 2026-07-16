@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { IsIn, IsOptional, IsString } from 'class-validator';
@@ -38,13 +38,10 @@ export class PaymentsController {
   @Public()
   @Post('webhook/:provider')
   @HttpCode(200)
-  webhook(
-    @Param('provider') provider: string,
-    @Req() req: Request & { rawBody?: Buffer },
-    @Headers('x-razorpay-signature') razorpaySig?: string,
-  ) {
+  webhook(@Param('provider') provider: string, @Req() req: Request & { rawBody?: Buffer }) {
     const raw = req.rawBody;
     if (!raw) throw AppError.validation('Missing raw request body');
-    return this.payments.handleWebhook(provider, raw, razorpaySig);
+    // Pass all headers; each provider reads its own signature/timestamp scheme.
+    return this.payments.handleWebhook(provider, raw, req.headers);
   }
 }

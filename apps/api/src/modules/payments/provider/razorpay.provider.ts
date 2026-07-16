@@ -8,7 +8,13 @@ import type {
   CreateIntentResult,
   IPaymentProvider,
   WebhookEvent,
+  WebhookHeaders,
 } from './payment-provider';
+
+function header(headers: WebhookHeaders, name: string): string | undefined {
+  const v = headers[name];
+  return Array.isArray(v) ? v[0] : v;
+}
 
 /**
  * Razorpay adapter. Webhook signature verification is the real HMAC-SHA256 scheme
@@ -58,12 +64,11 @@ export class RazorpayProvider implements IPaymentProvider {
     return { providerOrderId: data.id, clientToken: this.config.get('RAZORPAY_KEY_ID') };
   }
 
-  verifyAndParseWebhook(rawBody: Buffer | string, signature: string | undefined): WebhookEvent {
+  verifyAndParseWebhook(rawBody: Buffer, headers: WebhookHeaders): WebhookEvent {
+    const signature = header(headers, 'x-razorpay-signature');
     if (!signature) throw new AppError('PAYMENT_ERROR', 'Missing webhook signature');
     const secret = this.config.get('RAZORPAY_WEBHOOK_SECRET');
-    const expected = createHmac('sha256', secret)
-      .update(typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8'))
-      .digest('hex');
+    const expected = createHmac('sha256', secret).update(rawBody.toString('utf8')).digest('hex');
 
     const a = Buffer.from(expected);
     const b = Buffer.from(signature);
@@ -71,7 +76,7 @@ export class RazorpayProvider implements IPaymentProvider {
       throw new AppError('PAYMENT_ERROR', 'Invalid webhook signature');
     }
 
-    const payload = JSON.parse(typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8')) as {
+    const payload = JSON.parse(rawBody.toString('utf8')) as {
       event: string;
       payload?: { payment?: { entity?: { id?: string; order_id?: string; amount?: number; method?: string } } };
     };
