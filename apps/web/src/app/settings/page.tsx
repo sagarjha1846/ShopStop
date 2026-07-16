@@ -39,6 +39,31 @@ export default function SettingsPage() {
     })();
   }, []);
 
+  async function exportData() {
+    try {
+      const data = await apiAuthed<unknown>('/me/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'shopstop-data.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setStatus('Could not export data.');
+    }
+  }
+
+  async function deleteAccount() {
+    if (!confirm('Permanently delete your account? This anonymizes your data and cannot be undone.')) return;
+    try {
+      await apiAuthed('/me', { method: 'DELETE' });
+      window.location.href = '/';
+    } catch {
+      setStatus('Could not delete account.');
+    }
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setStatus(null);
@@ -80,6 +105,21 @@ export default function SettingsPage() {
           Two-factor authentication (TOTP) is {me?.mfaEnabled ? 'enabled' : 'available'}. Manage via the
           API (`/auth/mfa/enroll`) — a guided setup UI is on the roadmap.
         </p>
+      </div>
+
+      <div className="rounded-lg border bg-surface p-4">
+        <h2 className="font-semibold">Privacy &amp; data</h2>
+        <p className="mt-1 text-sm text-muted">
+          Download everything we hold about you, or permanently delete your account (DPDP/GDPR).
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportData}>
+            Download my data
+          </Button>
+          <Button variant="outline" className="text-danger" onClick={deleteAccount}>
+            Delete my account
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-4 text-sm">

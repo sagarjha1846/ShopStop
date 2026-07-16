@@ -28,6 +28,18 @@ export class UsersController {
     return this.users.updateProfile(user.id, dto);
   }
 
+  /** DSAR: export all personal data we hold (DPDP/GDPR right of access). */
+  @Get('me/export')
+  exportData(@CurrentUser() user: AuthUser) {
+    return this.users.exportData(user.id);
+  }
+
+  /** DSAR: erase the account (anonymize PII, retain transaction records). */
+  @Delete('me')
+  deleteAccount(@CurrentUser() user: AuthUser) {
+    return this.users.deleteAccount(user.id);
+  }
+
   @Public()
   @Get('users/:handle')
   profile(@Param('handle') handle: string) {

@@ -108,6 +108,77 @@ export class UsersService {
     return this.getMe(userId);
   }
 
+  /**
+   * DSAR data export (DPDP Act / GDPR right of access, docs/01, docs/11). Returns
+   * the personal data we hold for the user as a JSON bundle.
+   */
+  async exportData(userId: string): Promise<unknown> {
+    const [user, listings, ordersBuyer, ordersSeller, reviews, addresses, wishlist, notifications, consents, messages] =
+      await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, email: true, phone: true, createdAt: true, profile: true, trustScore: true },
+        }),
+        this.prisma.listing.findMany({ where: { sellerId: userId }, select: { id: true, title: true, status: true, priceMinor: true, createdAt: true } }),
+        this.prisma.order.findMany({ where: { buyerId: userId }, select: { id: true, status: true, totalMinor: true, createdAt: true } }),
+        this.prisma.order.findMany({ where: { sellerId: userId }, select: { id: true, status: true, totalMinor: true, createdAt: true } }),
+        this.prisma.review.findMany({ where: { authorId: userId }, select: { id: true, rating: true, body: true, createdAt: true } }),
+        this.prisma.address.findMany({ where: { userId } }),
+        this.prisma.wishlistItem.findMany({ where: { userId }, select: { listingId: true, createdAt: true } }),
+        this.prisma.notification.findMany({ where: { userId }, select: { type: true, title: true, createdAt: true } }),
+        this.prisma.consent.findMany({ where: { userId } }),
+        this.prisma.message.findMany({ where: { senderId: userId }, select: { id: true, threadId: true, kind: true, body: true, createdAt: true }, take: 5000 }),
+      ]);
+    return {
+      exportedAt: new Date().toISOString(),
+      user,
+      listings,
+      orders: { asBuyer: ordersBuyer, asSeller: ordersSeller },
+      reviews,
+      addresses,
+      wishlist,
+      notifications,
+      consents,
+      messages,
+    };
+  }
+
+  /**
+   * DSAR erasure (right to be forgotten). Anonymizes PII and deactivates the account
+   * while retaining transaction records (orders/ledger) the counterparty and law
+   * require. Messages are redacted. Sessions revoked; active listings removed.
+   */
+  async deleteAccount(userId: string): Promise<{ deleted: true }> {
+    const anon = `deleted-${userId.slice(-8)}`;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          email: `${anon}@deleted.local`,
+          phone: null,
+          passwordHash: null,
+          mfaEnabled: false,
+          mfaSecret: null,
+          status: 'BANNED', // blocks sign-in; no dedicated DELETED status
+          deletedAt: new Date(),
+        },
+      });
+      await tx.profile.updateMany({
+        where: { userId },
+        data: { displayName: 'Deleted user', bio: null, avatarUrl: null, locationText: null, lat: null, lng: null },
+      });
+      await tx.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      await tx.listing.updateMany({
+        where: { sellerId: userId, status: { in: ['ACTIVE', 'PENDING_REVIEW', 'PAUSED', 'DRAFT'] } },
+        data: { status: 'ARCHIVED', deletedAt: new Date() },
+      });
+      await tx.message.updateMany({ where: { senderId: userId }, data: { body: '[deleted]', deletedAt: new Date() } });
+      await tx.address.deleteMany({ where: { userId } });
+      await tx.wishlistItem.deleteMany({ where: { userId } });
+    });
+    return { deleted: true };
+  }
+
   async follow(followerId: string, handle: string): Promise<{ following: boolean }> {
     const target = await this.prisma.profile.findUnique({ where: { handle }, select: { userId: true } });
     if (!target) throw AppError.notFound('User');
