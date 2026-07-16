@@ -21,6 +21,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
+import { AddressesModule } from './modules/addresses/addresses.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -73,6 +74,7 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     ModerationModule,
     NotificationsModule,
     WishlistModule,
+    AddressesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
