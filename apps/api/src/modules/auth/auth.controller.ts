@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common'
 import { ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService, type AuthContext, type TokenPair } from './auth.service';
-import { LoginDto, OtpRequestDto, OtpVerifyDto, RegisterDto, VerifyEmailDto } from './dto/auth.dto';
+import { LoginDto, MfaCodeDto, OtpRequestDto, OtpVerifyDto, RegisterDto, VerifyEmailDto } from './dto/auth.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { AppConfigService } from '../../config/config.service';
@@ -81,6 +81,26 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return { user };
+  }
+
+  @Post('mfa/enroll')
+  @HttpCode(200)
+  mfaEnroll(@CurrentUser() user: AuthUser) {
+    return this.auth.startMfaEnrollment(user.id);
+  }
+
+  @Post('mfa/enable')
+  @HttpCode(200)
+  async mfaEnable(@CurrentUser() user: AuthUser, @Body() dto: MfaCodeDto) {
+    await this.auth.enableMfa(user.id, dto.code);
+    return { mfaEnabled: true };
+  }
+
+  @Post('mfa/disable')
+  @HttpCode(200)
+  async mfaDisable(@CurrentUser() user: AuthUser, @Body() dto: MfaCodeDto) {
+    await this.auth.disableMfa(user.id, dto.code);
+    return { mfaEnabled: false };
   }
 
   // ---- helpers ----

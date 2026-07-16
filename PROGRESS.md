@@ -23,7 +23,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Register/login (Argon2id), email verify token (Redis), phone OTP (dev-log provider)
 - [x] JWT access + rotating refresh (hashed sessions, **reuse detection verified** — jti nonce fix)
 - [x] RBAC guard + roles decorator + current-user decorator (ABAC ownership → in services, Phase 3+)
-- [~] MFA (TOTP) verify-on-login done; enrollment endpoint + Google OAuth pending
+- [x] MFA (TOTP): enroll (encrypted secret + otpauth QR) / enable / disable + login challenge — verified 7/7
+- [~] Google OAuth (server flow) pending
 - [x] Auth unit tests (password + token/rotation); integration/e2e pending Phase 7
 
 ## Phase 3 — Catalog & listings  ✅ verified end-to-end

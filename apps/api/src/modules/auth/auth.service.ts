@@ -9,6 +9,7 @@ import { AppError } from '../../common/errors/app-error';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
 import { OtpService } from './services/otp.service';
+import { encryptSecret, decryptSecret } from '../../common/crypto/crypto.util';
 import type { LoginDto, RegisterDto } from './dto/auth.dto';
 import type { AuthUser } from './types';
 
@@ -183,6 +184,37 @@ export class AuthService {
     return this.toAuthUser(user);
   }
 
+  // ---- MFA (TOTP) enrollment ----------------------------------------------
+
+  /** Generate a TOTP secret (stored encrypted, not yet enabled) + provisioning URI. */
+  async startMfaEnrollment(userId: string): Promise<{ secret: string; otpauthUrl: string }> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const secret = authenticator.generateSecret();
+    const enc = encryptSecret(secret, this.config.get('ENCRYPTION_KEY'));
+    await this.prisma.user.update({ where: { id: userId }, data: { mfaSecret: enc, mfaEnabled: false } });
+    const otpauthUrl = authenticator.keyuri(user.email, 'ShopStop', secret);
+    return { secret, otpauthUrl };
+  }
+
+  /** Confirm a code from the authenticator app to switch MFA on. */
+  async enableMfa(userId: string, code: string): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.mfaSecret) throw AppError.validation('Start MFA enrollment first');
+    const secret = this.decrypt(user.mfaSecret);
+    if (!authenticator.check(code, secret)) throw AppError.validation('Invalid MFA code');
+    await this.prisma.user.update({ where: { id: userId }, data: { mfaEnabled: true } });
+  }
+
+  /** Turn MFA off (requires a current code to prove possession). */
+  async disableMfa(userId: string, code: string): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.mfaEnabled || !user.mfaSecret) return;
+    if (!authenticator.check(code, this.decrypt(user.mfaSecret))) {
+      throw AppError.validation('Invalid MFA code');
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { mfaEnabled: false, mfaSecret: null } });
+  }
+
   async verifyEmail(token: string): Promise<void> {
     const userId = await this.redis.get(`emailverify:${token}`);
     if (!userId) throw AppError.validation('Verification link is invalid or expired');
@@ -251,8 +283,8 @@ export class AuthService {
     };
   }
 
-  // Placeholder envelope decryption for mfaSecret; real impl in crypto util (Phase 2).
+  // Envelope decryption for mfaSecret (AES-256-GCM; docs/11).
   private decrypt(value: string): string {
-    return value;
+    return decryptSecret(value, this.config.get('ENCRYPTION_KEY'));
   }
 }
