@@ -1,9 +1,17 @@
-import { Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { UsersService } from './users.service';
 import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types';
+
+class UpdateProfileDto {
+  @IsOptional() @IsString() @MaxLength(60) displayName?: string;
+  @IsOptional() @IsString() @MaxLength(500) bio?: string;
+  @IsOptional() @IsString() @MaxLength(160) locationText?: string;
+  @IsOptional() @IsString() @MaxLength(512) avatarUrl?: string;
+}
 
 @ApiTags('Users')
 @Controller()
@@ -13,6 +21,11 @@ export class UsersController {
   @Get('me/profile')
   me(@CurrentUser() user: AuthUser) {
     return this.users.getMe(user.id);
+  }
+
+  @Patch('me/profile')
+  updateMe(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
+    return this.users.updateProfile(user.id, dto);
   }
 
   @Public()

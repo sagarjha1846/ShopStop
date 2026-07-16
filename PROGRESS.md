@@ -24,7 +24,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] JWT access + rotating refresh (hashed sessions, **reuse detection verified** — jti nonce fix)
 - [x] RBAC guard + roles decorator + current-user decorator (ABAC ownership → in services, Phase 3+)
 - [x] MFA (TOTP): enroll (encrypted secret + otpauth QR) / enable / disable + login challenge — verified 7/7
-- [~] Google OAuth (server flow) pending
+- [x] Profile editing (PATCH /me/profile) + /settings page (verified)
+- [~] Google OAuth (server flow) pending — needs real Google credentials to verify
 - [x] Auth unit tests (password + token/rotation); integration/e2e pending Phase 7
 
 ## Phase 3 — Catalog & listings  ✅ verified end-to-end

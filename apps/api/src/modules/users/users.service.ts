@@ -91,6 +91,23 @@ export class UsersService {
     };
   }
 
+  /** Update the caller's own profile (display name, bio, location, avatar). */
+  async updateProfile(
+    userId: string,
+    dto: { displayName?: string; bio?: string; locationText?: string; avatarUrl?: string },
+  ): Promise<unknown> {
+    await this.prisma.profile.update({
+      where: { userId },
+      data: {
+        displayName: dto.displayName?.trim(),
+        bio: dto.bio?.trim(),
+        locationText: dto.locationText?.trim(),
+        avatarUrl: dto.avatarUrl,
+      },
+    });
+    return this.getMe(userId);
+  }
+
   async follow(followerId: string, handle: string): Promise<{ following: boolean }> {
     const target = await this.prisma.profile.findUnique({ where: { handle }, select: { userId: true } });
     if (!target) throw AppError.notFound('User');
