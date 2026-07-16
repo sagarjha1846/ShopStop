@@ -44,6 +44,7 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Orders + actor-aware state machine + timeline + inventory (SOLD/restock)
 - [x] Payments adapter (Razorpay) + intent + idempotent HMAC-verified webhook + ledger
 - [x] Reviews (verified-purchase) + reputation recompute
+- [x] Coupons: admin/seller creation + checkout discount (atomic redemption limit, release-on-cancel) — verified 6/6
 - [x] Messaging (threads, messages, structured offers accept/decline/counter)
 - [x] Socket.IO realtime gateway (JWT handshake, participant-checked rooms, live delivery,
       Redis adapter for horizontal scale) + live web chat — verified 5/5

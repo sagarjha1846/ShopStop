@@ -3,6 +3,7 @@ import { MessageKind, OfferStatus, OrderStatus, type Order, type Prisma } from '
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CouponsService } from '../coupons/coupons.service';
 import { resolveTransition, type OrderAction, type OrderActor } from './order.state';
 import type { CreateOrderDto } from './dto/order.dto';
 
@@ -21,6 +22,7 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly coupons: CouponsService,
   ) {}
 
   async create(buyerId: string, dto: CreateOrderDto): Promise<Order> {
@@ -41,30 +43,47 @@ export class OrdersService {
     }
 
     const subtotalMinor = unitPriceMinor * quantity;
-    const feeMinor = Math.round((subtotalMinor * OrdersService.PLATFORM_FEE_BPS) / 10_000);
-    const totalMinor = subtotalMinor; // buyer pays subtotal; fee deducted from seller settlement (P2)
+
+    // Optional coupon: validate + reserve a redemption; discount capped at subtotal.
+    let discountMinor = 0;
+    let couponId: string | undefined;
+    if (dto.couponCode?.trim()) {
+      const applied = await this.coupons.validateAndReserve(dto.couponCode, listing.sellerId, subtotalMinor);
+      discountMinor = applied.discountMinor;
+      couponId = applied.couponId;
+    }
+
+    const feeMinor = Math.round(((subtotalMinor - discountMinor) * OrdersService.PLATFORM_FEE_BPS) / 10_000);
+    const totalMinor = subtotalMinor - discountMinor; // buyer pays subtotal minus discount
 
     const timeline: TimelineEntry[] = [
       { status: OrderStatus.PENDING, actor: 'buyer', at: new Date().toISOString() },
     ];
 
-    return this.prisma.order.create({
-      data: {
-        listingId: listing.id,
-        buyerId,
-        sellerId: listing.sellerId,
-        status: OrderStatus.PENDING,
-        quantity,
-        unitPriceMinor,
-        subtotalMinor,
-        discountMinor: 0,
-        feeMinor,
-        totalMinor,
-        currency: listing.currency,
-        shippingAddressId: dto.shippingAddressId,
-        timeline: timeline as unknown as Prisma.InputJsonValue,
-      },
-    });
+    try {
+      return await this.prisma.order.create({
+        data: {
+          listingId: listing.id,
+          buyerId,
+          sellerId: listing.sellerId,
+          status: OrderStatus.PENDING,
+          quantity,
+          unitPriceMinor,
+          subtotalMinor,
+          discountMinor,
+          feeMinor,
+          totalMinor,
+          currency: listing.currency,
+          couponId,
+          shippingAddressId: dto.shippingAddressId,
+          timeline: timeline as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      // Order row failed after reserving a redemption → give it back.
+      if (couponId) await this.coupons.release(couponId).catch(() => undefined);
+      throw err;
+    }
   }
 
   async get(orderId: string, userId: string): Promise<Order> {
@@ -151,6 +170,11 @@ export class OrdersService {
       }
       return row;
     });
+
+    // Give back the coupon redemption if the order is abandoned before fulfilment.
+    if ((nextStatus === OrderStatus.CANCELLED || nextStatus === OrderStatus.REJECTED) && order.couponId) {
+      await this.coupons.release(order.couponId).catch(() => undefined);
+    }
 
     // Notify the counterparty (the party who did NOT trigger this transition).
     const recipient = actor === 'buyer' ? order.sellerId : order.buyerId;

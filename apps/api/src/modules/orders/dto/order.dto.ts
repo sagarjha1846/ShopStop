@@ -22,6 +22,11 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   shippingAddressId?: string;
+
+  @ApiPropertyOptional({ description: 'Optional coupon code to apply' })
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
 }
 
 export class OrderTransitionDto {
