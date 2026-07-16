@@ -26,6 +26,7 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] MFA (TOTP): enroll (encrypted secret + otpauth QR) / enable / disable + login challenge — verified 7/7
 - [x] Profile editing (PATCH /me/profile) + /settings page (verified)
 - [x] DSAR compliance: data export (/me/export) + account erasure/anonymization (DELETE /me) + settings UI — verified
+- [x] Support tickets: create/list/reply(threaded)/close + admin queue (RBAC, ownership) + /support page — verified
 - [~] Google OAuth (server flow) pending — needs real Google credentials to verify
 - [x] Auth unit tests (password + token/rotation); integration/e2e pending Phase 7
 
