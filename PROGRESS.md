@@ -50,6 +50,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Disputes (open party-only/state-gated, admin resolve → refund/audit)
 - [x] Users public trust profile (score + badges, no PII) + follow
 - [~] Trust-score recompute worker (BullMQ) → Phase 7; counters updated inline for now
+- [x] Notifications: persist + realtime push on order/message/offer events; web bell +
+      /notifications page (live unread count) — verified 4/4
 
 ## Phase 6 — Frontend (apps/web, Next.js)  ✅ core slice verified against live API
 - [x] Next.js 15 App Router + Tailwind + design tokens (light/dark, no-FOUC) + UI primitives

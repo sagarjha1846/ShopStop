@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBell } from './NotificationBell';
 import { LinkButton } from './ui';
 
 export function Header() {
@@ -26,6 +27,7 @@ export function Header() {
           <LinkButton href="/dashboard" variant="ghost" className="hidden sm:inline-flex">
             Dashboard
           </LinkButton>
+          <NotificationBell />
           <LinkButton href="/login" variant="ghost">
             Sign in
           </LinkButton>
