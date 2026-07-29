@@ -342,6 +342,13 @@ model Order {
   couponId       String? @map("coupon_id")
   shippingAddressId String? @map("shipping_address_id")
   trackingNote   String? @map("tracking_note") // free-text until courier integration
+  // Inventory hold. Stock is reserved atomically at checkout (not at payment), so a
+  // flash sale can never oversell. `stockHeld` makes release idempotent: exactly one
+  // transition can flip it true→false, and only that one returns units to the listing.
+  stockHeld      Boolean   @default(false) @map("stock_held")
+  // A PENDING order's hold lapses at this instant; the sweeper cancels + restocks it
+  // so abandoned checkouts cannot sit on inventory during a drop. Cleared once paid.
+  reservationExpiresAt DateTime? @map("reservation_expires_at")
   timeline       Json    @default("[]") // append-only state transitions w/ actor+ts
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -357,6 +364,8 @@ model Order {
 
   @@index([buyerId, status])
   @@index([sellerId, status])
+  // Drives the reservation sweeper: find expired holds without scanning all orders.
+  @@index([status, reservationExpiresAt])
   @@map("orders")
 }
 
