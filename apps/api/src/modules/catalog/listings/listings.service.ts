@@ -7,6 +7,7 @@ import { validateAttributes } from '../attribute-validator';
 import { RiskService } from '../../trust/risk.service';
 import { MediaScanProducer } from '../../../jobs/media-scan.producer';
 import { assertSellerTransition, isPubliclyVisible, type SellerListingAction } from './listing.state';
+import { ViewCounterService } from './view-counter.service';
 import type { CreateListingDto, UpdateListingDto } from './dto/listing.dto';
 
 export interface ListingQuery {
@@ -24,6 +25,7 @@ export class ListingsService {
     private readonly categories: CategoriesService,
     private readonly risk: RiskService,
     private readonly mediaScan: MediaScanProducer,
+    private readonly views: ViewCounterService,
   ) {}
 
   async create(sellerId: string, dto: CreateListingDto): Promise<Listing> {
@@ -223,11 +225,11 @@ export class ListingsService {
     if (!isPubliclyVisible(listing.status) && listing.sellerId !== viewerId) {
       throw AppError.notFound('Listing');
     }
-    // Fire-and-forget view count (best effort; not on the read's critical path invariant).
-    void this.prisma.listing
-      .update({ where: { id: listing.id }, data: { viewCount: { increment: 1 } } })
-      .catch(() => undefined);
-    return listing;
+    // Count the view in Redis rather than writing the listing row. Writing here would
+    // put every reader in a lock queue on the same row that checkout reserves stock
+    // on, so a popular listing's traffic would slow down its own sales.
+    const pendingViews = await this.views.record(listing.id);
+    return { ...listing, viewCount: listing.viewCount + pendingViews };
   }
 
   /** Browse/list, cursor-paginated. Public browse restricts to visible statuses. */

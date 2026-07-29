@@ -23,7 +23,7 @@ const intent = await j('POST', '/payments/intent', { token: buyer, key: `p-${RUN
 ok('cashfree intent created', intent.status === 200 && intent.data.provider === 'CASHFREE' && intent.data.providerOrderId.startsWith('cf_order_dev_'), `pid=${intent.data?.providerOrderId}`);
 
 // Cashfree-signed webhook: base64(HMAC-SHA256(secret, timestamp + rawBody)).
-const evt = { type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: intent.data.providerOrderId }, payment: { cf_payment_id: 987654, payment_amount: 7000, payment_status: 'SUCCESS', payment_group: 'upi' } } };
+const evt = { type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: intent.data.providerOrderId }, payment: { cf_payment_id: `cf_${RUN}`, payment_amount: 7000, payment_status: 'SUCCESS', payment_group: 'upi' } } };
 const raw = JSON.stringify(evt);
 const ts = Date.now().toString();
 const sig = createHmac('sha256', SECRET).update(ts + raw).digest('base64');

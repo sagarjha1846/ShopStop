@@ -4,6 +4,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
 import { AppConfigModule } from './config/config.module';
+import { AppConfigService } from './config/config.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { MailModule } from './mail/mail.module';
@@ -59,9 +60,18 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
         },
       },
     }),
-    ThrottlerModule.forRoot([
-      { ttl: 60_000, limit: 120 }, // global default; per-route overrides via @Throttle
-    ]),
+    // Global default; per-route overrides via @Throttle. Driven by env so the ceiling
+    // can be raised for a sale without shipping a new build.
+    ThrottlerModule.forRootAsync({
+      imports: [AppConfigModule],
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) => [
+        {
+          ttl: config.get('RATE_LIMIT_WINDOW_SEC') * 1000,
+          limit: config.get('RATE_LIMIT_MAX'),
+        },
+      ],
+    }),
     PrismaModule,
     RedisModule,
     MailModule,
