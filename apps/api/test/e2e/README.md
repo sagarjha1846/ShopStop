@@ -23,13 +23,14 @@ node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live mes
 Each prints PASS/FAIL per assertion and exits non-zero on any failure.
 
 ### Re-running
-Suites publish listings as the seeded demo admin, and the risk engine holds any seller
-who posts 10+ listings in an hour — that rule is doing its job, but a full pass creates
-enough listings that a second back-to-back pass trips it and listings land in
-PENDING_REVIEW instead of ACTIVE. Re-seed between passes:
-```bash
-pnpm db:reset                    # destructive: drops + remigrates + reseeds the dev DB
-```
+Safe to run repeatedly against the same database — verified over three consecutive
+full passes. Each suite sells as its own freshly-registered account, because the risk
+engine holds any seller who posts 10+ listings in an hour: when every suite shared the
+seeded demo admin, one full pass nearly hit that on its own and the next pass landed
+every listing in PENDING_REVIEW. Keep new suites on their own seller.
+
+`pnpm db:reset` (destructive: drops, remigrates and reseeds the dev database) is there
+if you want a clean slate, but the suites no longer need it.
 
 ## Coverage
 - **commerce**: listing publish, offer negotiate/accept, idempotent order create,

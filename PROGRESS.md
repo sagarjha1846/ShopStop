@@ -48,6 +48,10 @@ Design package (docs/) is complete; this tracks **implementation**.
 ## Phase 4 — Commerce  ✅ verified end-to-end (24/24 E2E)
 - [x] Idempotency interceptor (Redis: fingerprint + in-flight lock + cache-before-emit)
 - [x] Orders + actor-aware state machine + timeline + inventory (SOLD/restock)
+- [x] **Oversell-proof checkout**: stock reserved atomically at checkout (conditional
+      `UPDATE ... WHERE quantity >= n`), not at payment; `stock_held` flag makes release
+      idempotent; DB CHECK constraint backs it; 15-min reservation sweeper (Redis-fenced)
+      reclaims abandoned checkouts — verified 14-buyer stampede on 5 units → exactly 5 win
 - [x] Payments: Razorpay + Cashfree behind one provider port (per-provider webhook HMAC), idempotent capture + ledger — verified
 - [x] Reviews (verified-purchase) + reputation recompute
 - [x] Coupons: admin/seller creation + checkout discount (atomic redemption limit, release-on-cancel) — verified 6/6
@@ -68,6 +72,9 @@ Design package (docs/) is complete; this tracks **implementation**.
 
 ## Phase 6 — Frontend (apps/web, Next.js)  ✅ core slice verified against live API
 - [x] Next.js 15 App Router + Tailwind + design tokens (light/dark, no-FOUC) + UI primitives
+- [x] Design language rebuilt: paired type scale (size+leading+tracking), fill-not-outline
+      tiles, one accent reserved for actions, Container/Section/Field/EmptyState/Skeleton,
+      stroked icon set, skip link + visible focus + reduced-motion
 - [x] API client (SSR direct / browser proxy) + client auth (login/register/refresh, in-mem token)
 - [x] Home (SSR + revalidate), Search (live FTS), Listing detail (SSR + JSON-LD + trust panel)
 - [x] Sell page (auth-gated, data-driven category attribute form → risk-checked publish)
@@ -78,12 +85,16 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Browser smoke (Chromium): register→cookie→sell→create→detail→theme 7/7; admin console loads live queue
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 27 unit + 2 black-box E2E suites (37 API checks); CI runs them
+- [x] Test suites: 44 unit + 9 black-box E2E suites (82 API checks); `pnpm test:e2e:live`
+      runs them all behind one exit code; repeatable (3 consecutive clean passes)
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
       Caddy edge (auto-HTTPS + security headers), runtime migrate-on-boot, .dockerignore
 - [x] SessionStart hook (auto-provision Postgres/Redis/.env/deps/migrate/seed)
+- [x] Hot-row relief: listing view counts buffered in Redis + batch-flushed, so browse
+      traffic no longer takes a row lock on the row checkout reserves stock on
+- [x] Rate limit driven by RATE_LIMIT_* env (was hardcoded), tunable for a sale
 
 ---
 ### Session log
@@ -104,3 +115,18 @@ Design package (docs/) is complete; this tracks **implementation**.
   by recreating from context and re-provisioning. LESSON: commit after every green typecheck.
   Verified live: commerce 24/24, trust 13/13 E2E; 27 unit tests green. E2E scripts committed
   under apps/api/test/e2e. Next: Phase 6 frontend (apps/web) + Phase 7 hardening.
+- S5: Hardening pass driven by "survive a sale". Found and fixed a real oversell:
+  concurrent checkout let 14 buyers take 5 units and left the listing at quantity -9,
+  then relisted it while negative. Replaced read-then-write with atomic reservation at
+  checkout + idempotent release + a DB CHECK + an expiry sweeper. Then found the second
+  half of the same problem: every listing view wrote `view_count` on the row checkout
+  needs to lock, so browsing throttled buying — 900 views meant 900 lock-taking writes.
+  Buffered those in Redis with a batched flush (900 views → 0 row writes). Rebuilt the
+  design system around a quiet, type-led language and carried it through the listing,
+  auth and search surfaces, making the explainable trust breakdown the centrepiece.
+  Fixed three latent defects on the way: the Tailwind TS config was silently falling
+  back to a default theme (no jiti/sucrase installed) so every custom token was being
+  dropped; the listing endpoint leaked internal fraud/dispute penalty scores; and the
+  E2E suites only passed against a virgin database. LESSON: a silent fallback is worse
+  than a crash — the styles "worked" for weeks because the old class names happened to
+  resolve elsewhere.

@@ -6,11 +6,9 @@
  *
  * Exits non-zero if any suite fails, so CI can gate on a single command.
  *
- * Note on repeatability: these suites publish listings as the seeded demo admin, and
- * the risk engine holds a seller who posts 10+ listings in an hour (that rule is
- * working as intended — it is what catches listing spam). A full pass creates enough
- * listings that a second back-to-back pass can trip it, so re-run against a freshly
- * seeded database: `pnpm db:reset`.
+ * Safe to run repeatedly against the same database: each suite sells as its own
+ * freshly-registered account, so no single seller accumulates enough listings to trip
+ * the risk engine's velocity rule. Keep new suites on their own seller.
  */
 import { spawn } from 'node:child_process';
 import { readdir } from 'node:fs/promises';

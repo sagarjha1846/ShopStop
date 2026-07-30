@@ -39,7 +39,11 @@ const RUN = Date.now().toString(36);
 const STOCK = 5;
 const BUYERS = 14;
 
-const seller = await login('admin@shopstop.local', 'AdminPass123!');
+// Each suite sells as its own freshly-registered account. Sharing one seller across
+// suites makes them collide: the risk engine holds a seller who posts 10+ listings in
+// an hour, and a full pass creates roughly that many, so a second pass would land every
+// listing in PENDING_REVIEW instead of ACTIVE.
+const seller = (await j('POST', '/auth/register', { body: { email: `inve_seller_${RUN}@example.com`, password: 'sellerpassword1', displayName: 'Test Seller' } })).data.accessToken;
 const cats = (await j('GET', '/categories')).data;
 const catId = cats
   .find((c) => c.slug === 'electronics')

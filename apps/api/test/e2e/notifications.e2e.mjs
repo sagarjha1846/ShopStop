@@ -8,7 +8,11 @@ async function j(method, path, { token, body } = {}) {
   return { status: res.status, data: d };
 }
 const login = async (e, p) => (await j('POST', '/auth/login', { body: { email: e, password: p } })).data.accessToken;
-const seller = await login('admin@shopstop.local', 'AdminPass123!');
+// Each suite sells as its own freshly-registered account. Sharing one seller across
+// suites makes them collide: the risk engine holds a seller who posts 10+ listings in
+// an hour, and a full pass creates roughly that many, so a second pass would land every
+// listing in PENDING_REVIEW instead of ACTIVE.
+const seller = (await j('POST', '/auth/register', { body: { email: `noti_seller_${RUN}@example.com`, password: 'sellerpassword1', displayName: 'Test Seller' } })).data.accessToken;
 const buyer = (await j('POST', '/auth/register', { body: { email: `notif_${RUN}@example.com`, password: 'notifpass1234' } })).data.accessToken;
 
 const cats = (await j('GET', '/categories')).data;
