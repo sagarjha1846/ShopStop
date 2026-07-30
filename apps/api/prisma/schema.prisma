@@ -237,6 +237,14 @@ model Listing {
   @@index([status, publishedAt])
   @@index([categoryId, status])
   @@index([sellerId, status])
+  // The browse feed is additionally served by four *partial* indexes that Prisma's
+  // DSL cannot express, created in the browse_indexes migration:
+  //   listings_browse_recent_idx           (created_at DESC)
+  //   listings_browse_price_idx            (price_minor)
+  //   listings_browse_boosted_idx          (boosted_until DESC)
+  //   listings_browse_category_recent_idx  (category_id, created_at DESC)
+  // each WHERE deleted_at IS NULL AND status = 'ACTIVE'. Without them every browse
+  // query sequential-scans the whole catalogue and sorts it. Do not drop them.
   @@map("listings")
 }
 
