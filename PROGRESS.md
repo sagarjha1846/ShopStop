@@ -95,6 +95,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Hot-row relief: listing view counts buffered in Redis + batch-flushed, so browse
       traffic no longer takes a row lock on the row checkout reserves stock on
 - [x] Rate limit driven by RATE_LIMIT_* env (was hardcoded), tunable for a sale
+- [x] Browse-feed partial indexes (recent / price / boosted / category): measured on a
+      300k-row catalogue, 78ms full scans -> 0.3ms index scans; boosted feed 57ms -> 0.04ms
 
 ---
 ### Session log
@@ -130,3 +132,10 @@ Design package (docs/) is complete; this tracks **implementation**.
   E2E suites only passed against a virgin database. LESSON: a silent fallback is worse
   than a crash — the styles "worked" for weeks because the old class names happened to
   resolve elsewhere.
+  Closed the session with a query-plan pass: every browse query was sequential-scanning
+  the whole catalogue and sorting it (78ms / 15,870 buffers at 300k rows), and the
+  sponsored-listings query — which runs on every page-1 load — scanned all 300k rows to
+  return none. Four partial indexes matching the browse predicate took those to 0.3ms
+  and 0.04ms. Also added sign-out (the API had the endpoint; the web client never called
+  it) and an auth-aware header. Next: consider a short-TTL cache for listing detail, and
+  the same query-plan pass over the per-user tables.
