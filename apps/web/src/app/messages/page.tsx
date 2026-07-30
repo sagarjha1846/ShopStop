@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import type { Socket } from 'socket.io-client';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
 import { getSocket, closeSocket } from '@/lib/socket';
 import { formatMoney, timeAgo } from '@/lib/format';
-import { Button } from '@/components/ui';
+import { Button, Loading, SignInPrompt, inputClass } from '@/components/ui';
 
 interface Thread {
   id: string;
@@ -124,33 +123,30 @@ export default function MessagesPage() {
     if (active) await loadMessages(active);
   }
 
-  if (!ready) return <div className="text-muted">Loading…</div>;
-  if (!authed)
-    return (
-      <div className="mx-auto max-w-sm text-center">
-        <Link href="/login?next=/messages" className="text-brand underline">
-          Sign in to view messages
-        </Link>
-      </div>
-    );
+  if (!ready) return <Loading />;
+  if (!authed) return <SignInPrompt next="/messages" what="your messages" />;
 
   return (
-    <div className="grid h-[70vh] gap-4 md:grid-cols-[280px_1fr]">
-      <aside className="overflow-y-auto rounded-lg border bg-surface">
-        {threads.length === 0 && <p className="p-4 text-sm text-muted">No conversations yet.</p>}
+    <div className="py-4">
+      {/* Visually the panes are the page, but the heading has to exist for anyone
+          navigating by landmark or headings. */}
+      <h1 className="sr-only">Messages</h1>
+      <div className="grid h-[70vh] gap-4 md:grid-cols-[280px_1fr]">
+      <aside className="overflow-y-auto rounded-lg bg-surface shadow-card">
+        {threads.length === 0 && <p className="p-4 text-footnote text-muted">No conversations yet.</p>}
         {threads.map((t) => (
           <button
             key={t.id}
             onClick={() => open(t.id)}
-            className={`block w-full border-b p-3 text-left hover:bg-bg ${active === t.id ? 'bg-bg' : ''}`}
+            className={`block w-full border-b p-3 text-left hover:bg-sunken ${active === t.id ? 'bg-sunken' : ''}`}
           >
-            <div className="line-clamp-1 text-sm font-medium">{t.listing?.title ?? 'Conversation'}</div>
-            <div className="line-clamp-1 text-xs text-muted">{t.messages[0]?.body ?? '…'}</div>
+            <div className="line-clamp-1 text-footnote font-medium">{t.listing?.title ?? 'Conversation'}</div>
+            <div className="line-clamp-1 text-caption text-muted">{t.messages[0]?.body ?? '…'}</div>
           </button>
         ))}
       </aside>
 
-      <section className="flex flex-col rounded-lg border bg-surface">
+      <section className="flex flex-col rounded-lg bg-surface shadow-card">
         {!active ? (
           <div className="flex flex-1 items-center justify-center text-muted">Select a conversation</div>
         ) : (
@@ -160,24 +156,24 @@ export default function MessagesPage() {
                 const mine = m.senderId === meId;
                 if (m.kind === 'SYSTEM')
                   return (
-                    <div key={m.id} className="text-center text-xs text-muted">
+                    <div key={m.id} className="text-center text-caption text-muted">
                       {m.body}
                     </div>
                   );
                 if (m.kind === 'OFFER')
                   return (
                     <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                      <div className="rounded-lg border bg-bg p-3 text-sm">
+                      <div className="rounded-lg border bg-bg p-3 text-footnote">
                         <div className="font-medium">Offer: {formatMoney(m.offerMinor ?? 0)}</div>
-                        <div className="text-xs text-muted">{m.offerStatus}</div>
+                        <div className="text-caption text-muted">{m.offerStatus}</div>
                         {!mine && m.offerStatus === 'OPEN' && (
                           <div className="mt-2 flex gap-2">
-                            <Button className="px-2 py-1 text-xs" onClick={() => respond(m.id, 'accept')}>
+                            <Button className="px-2 py-1 text-caption" onClick={() => respond(m.id, 'accept')}>
                               Accept
                             </Button>
                             <Button
                               variant="outline"
-                              className="px-2 py-1 text-xs"
+                              className="px-2 py-1 text-caption"
                               onClick={() => respond(m.id, 'decline')}
                             >
                               Decline
@@ -190,7 +186,7 @@ export default function MessagesPage() {
                 return (
                   <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                     <div
-                      className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${mine ? 'bg-brand text-brand-fg' : 'border bg-bg'}`}
+                      className={`max-w-[75%] rounded-lg px-3 py-2 text-footnote ${mine ? 'bg-brand text-brand-fg' : 'border bg-sunken'}`}
                     >
                       {m.body}
                       <div className="mt-0.5 text-[10px] opacity-70">{timeAgo(m.createdAt)}</div>
@@ -206,7 +202,7 @@ export default function MessagesPage() {
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && send()}
                   placeholder="Type a message…"
-                  className="flex-1 rounded-md border bg-bg px-3 py-2 text-sm"
+                  className={`${inputClass} text-caption`}
                 />
                 <Button onClick={send}>Send</Button>
               </div>
@@ -216,7 +212,7 @@ export default function MessagesPage() {
                   onChange={(e) => setOffer(e.target.value)}
                   type="number"
                   placeholder="Make an offer (₹)"
-                  className="flex-1 rounded-md border bg-bg px-3 py-2 text-sm"
+                  className={`${inputClass} text-caption`}
                 />
                 <Button variant="outline" onClick={sendOffer}>
                   Offer
@@ -226,6 +222,7 @@ export default function MessagesPage() {
           </>
         )}
       </section>
+    </div>
     </div>
   );
 }

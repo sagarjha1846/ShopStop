@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
-import { Badge, Button } from '@/components/ui';
+import { Badge, Button, Loading, PageHeader, SignInPrompt, inputClass } from '@/components/ui';
 
 interface Address {
   id: string;
@@ -57,25 +56,20 @@ export default function AddressesPage() {
     await load();
   }
 
-  if (!ready) return <div className="text-muted">Loading…</div>;
-  if (!authed)
-    return (
-      <Link href="/login?next=/addresses" className="text-brand underline">
-        Sign in to manage addresses
-      </Link>
-    );
+  if (!ready) return <Loading />;
+  if (!authed) return <SignInPrompt next="/addresses" what="your addresses" />;
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold">Addresses</h1>
+      <PageHeader title="Addresses" description="Where your orders get delivered." />
 
       <ul className="space-y-2">
         {items.map((a) => (
-          <li key={a.id} className="flex items-start justify-between rounded-lg border bg-surface p-3">
-            <div className="text-sm">
+          <li key={a.id} className="flex items-start justify-between rounded-lg bg-surface shadow-card p-3">
+            <div className="text-footnote">
               <div className="flex items-center gap-2 font-medium">
                 {a.label || 'Address'} {a.isDefault && <Badge tone="brand">Default</Badge>}
               </div>
@@ -86,11 +80,11 @@ export default function AddressesPage() {
             </div>
             <div className="flex gap-2">
               {!a.isDefault && (
-                <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => makeDefault(a)}>
+                <Button variant="ghost" className="px-2 py-1 text-caption" onClick={() => makeDefault(a)}>
                   Set default
                 </Button>
               )}
-              <Button variant="outline" className="px-2 py-1 text-xs" onClick={() => remove(a.id)}>
+              <Button variant="outline" className="px-2 py-1 text-caption" onClick={() => remove(a.id)}>
                 Delete
               </Button>
             </div>
@@ -99,17 +93,17 @@ export default function AddressesPage() {
         {items.length === 0 && <p className="text-muted">No saved addresses yet.</p>}
       </ul>
 
-      <form onSubmit={add} className="space-y-2 rounded-lg border bg-surface p-4">
+      <form onSubmit={add} className="space-y-2 rounded-lg bg-surface shadow-card p-4">
         <h2 className="font-semibold">Add an address</h2>
-        <input placeholder="Label (Home, Work)" value={form.label} onChange={set('label')} className="w-full rounded-md border bg-bg px-3 py-2" />
-        <input required placeholder="Address line 1" value={form.line1} onChange={set('line1')} className="w-full rounded-md border bg-bg px-3 py-2" />
-        <input placeholder="Address line 2" value={form.line2} onChange={set('line2')} className="w-full rounded-md border bg-bg px-3 py-2" />
+        <input placeholder="Label (Home, Work)" value={form.label} onChange={set('label')} className={inputClass} />
+        <input required placeholder="Address line 1" value={form.line1} onChange={set('line1')} className={inputClass} />
+        <input placeholder="Address line 2" value={form.line2} onChange={set('line2')} className={inputClass} />
         <div className="grid grid-cols-3 gap-2">
-          <input required placeholder="City" value={form.city} onChange={set('city')} className="rounded-md border bg-bg px-3 py-2" />
-          <input required placeholder="State" value={form.state} onChange={set('state')} className="rounded-md border bg-bg px-3 py-2" />
-          <input required placeholder="PIN" value={form.postalCode} onChange={set('postalCode')} className="rounded-md border bg-bg px-3 py-2" />
+          <input required placeholder="City" value={form.city} onChange={set('city')} className={inputClass} />
+          <input required placeholder="State" value={form.state} onChange={set('state')} className={inputClass} />
+          <input required placeholder="PIN" value={form.postalCode} onChange={set('postalCode')} className={inputClass} />
         </div>
-        {err && <p className="text-sm text-danger">{err}</p>}
+        {err && <p className="text-footnote text-danger">{err}</p>}
         <Button type="submit">Add address</Button>
       </form>
     </div>

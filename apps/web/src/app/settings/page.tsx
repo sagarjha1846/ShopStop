@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
-import { Button } from '@/components/ui';
+import { Button, Loading, PageHeader, SignInPrompt, inputClass } from '@/components/ui';
 
 interface Me {
   email: string;
@@ -75,61 +75,58 @@ export default function SettingsPage() {
     }
   }
 
-  if (!ready) return <div className="text-muted">Loading…</div>;
-  if (!authed)
-    return (
-      <Link href="/login?next=/settings" className="text-brand underline">
-        Sign in to manage settings
-      </Link>
-    );
+  if (!ready) return <Loading />;
+  if (!authed) return <SignInPrompt next="/settings" what="your settings" />;
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <h1 className="text-2xl font-bold">Settings</h1>
+      <PageHeader title="Settings" description="Your profile, privacy and account data." />
 
-      <form onSubmit={save} className="space-y-3 rounded-lg border bg-surface p-4">
+      <form onSubmit={save} className="space-y-3 rounded-lg bg-surface shadow-card p-4">
         <h2 className="font-semibold">Profile</h2>
-        <div className="text-sm text-muted">
+        <div className="text-footnote text-muted">
           {me?.email} · @{me?.profile?.handle}
         </div>
-        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Display name" className="w-full rounded-md border bg-bg px-3 py-2" />
-        <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Bio" rows={3} className="w-full rounded-md border bg-bg px-3 py-2" />
-        <input value={locationText} onChange={(e) => setLocationText(e.target.value)} placeholder="Location" className="w-full rounded-md border bg-bg px-3 py-2" />
-        {status && <p className="text-sm text-accent">{status}</p>}
+        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Display name" className={inputClass} />
+        <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Bio" rows={3} className={inputClass} />
+        <input value={locationText} onChange={(e) => setLocationText(e.target.value)} placeholder="Location" className={inputClass} />
+        {status && <p className="text-footnote text-accent">{status}</p>}
         <Button type="submit">Save profile</Button>
       </form>
 
-      <div className="rounded-lg border bg-surface p-4">
+      <div className="rounded-lg bg-surface shadow-card p-4">
         <h2 className="font-semibold">Security</h2>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-footnote text-muted">
           Two-factor authentication (TOTP) is {me?.mfaEnabled ? 'enabled' : 'available'}. Manage via the
           API (`/auth/mfa/enroll`) — a guided setup UI is on the roadmap.
         </p>
       </div>
 
-      <div className="rounded-lg border bg-surface p-4">
+      <div className="rounded-lg bg-surface shadow-card p-4">
         <h2 className="font-semibold">Privacy &amp; data</h2>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-footnote text-muted">
           Download everything we hold about you, or permanently delete your account (DPDP/GDPR).
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button variant="outline" onClick={exportData}>
+          <Button variant="secondary" onClick={exportData}>
             Download my data
           </Button>
-          <Button variant="outline" className="text-danger" onClick={deleteAccount}>
+          {/* Destructive actions read as text, never as a filled red button — the
+              weight should match the risk, not shout for the click. */}
+          <Button variant="danger" onClick={deleteAccount}>
             Delete my account
           </Button>
         </div>
       </div>
 
-      <div className="flex gap-4 text-sm">
-        <Link href="/addresses" className="text-brand underline">
+      <div className="flex gap-4 text-footnote">
+        <Link href="/addresses" className="text-link hover:underline">
           Addresses
         </Link>
-        <Link href="/wishlist" className="text-brand underline">
+        <Link href="/wishlist" className="text-link hover:underline">
           Wishlist
         </Link>
-        <Link href="/dashboard" className="text-brand underline">
+        <Link href="/dashboard" className="text-link hover:underline">
           Dashboard
         </Link>
       </div>

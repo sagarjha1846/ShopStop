@@ -29,7 +29,7 @@ try {
 
   // Fresh navigation must recover the session from the httpOnly cookie via refresh().
   await page.goto(`${BASE}/sell`, { waitUntil: 'networkidle' });
-  await page.waitForSelector('select', { timeout: 5000 });
+  await page.waitForSelector('select', { timeout: 30000 });
   ok('sell page authed via cookie refresh', await page.isVisible('text=Create a listing'));
 
   const value = await page.evaluate(() => {

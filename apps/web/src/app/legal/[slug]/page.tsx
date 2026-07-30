@@ -88,12 +88,12 @@ export default async function LegalPage({ params }: { params: Promise<{ slug: st
   if (!policy) notFound();
   return (
     <article className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-2xl font-bold">{policy.title}</h1>
-      <p className="rounded-md border bg-surface p-3 text-xs text-muted">
+      <h1 className="text-title font-semibold">{policy.title}</h1>
+      <p className="rounded-md bg-surface shadow-card p-3 text-caption text-muted">
         Template for the ShopStop MVP — review by legal counsel is required before launch.
       </p>
       {policy.body.map((p, i) => (
-        <p key={i} className="text-sm leading-relaxed">
+        <p key={i} className="text-footnote leading-relaxed">
           {p}
         </p>
       ))}

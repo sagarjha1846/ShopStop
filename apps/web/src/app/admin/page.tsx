@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
 import { formatMoney, timeAgo } from '@/lib/format';
-import { Badge, Button } from '@/components/ui';
+import { Badge, Button, EmptyState, LinkButton, Loading, PageHeader } from '@/components/ui';
 
 interface FraudEvent {
   id: string;
@@ -77,21 +77,20 @@ export default function AdminPage() {
     }
   }
 
-  if (!ready) return <div className="text-muted">Loading…</div>;
+  if (!ready) return <Loading />;
   if (role !== 'ADMIN' && role !== 'MODERATOR')
     return (
-      <div className="mx-auto max-w-sm text-center text-muted">
-        <p>Admin access required.</p>
-        <Link href="/login?next=/admin" className="text-brand underline">
-          Sign in as an admin
-        </Link>
-      </div>
+      <EmptyState
+        title="You don't have access to this area"
+        body="The moderation console is limited to admins and moderators."
+        action={<LinkButton href="/login?next=/admin">Sign in with an admin account</LinkButton>}
+      />
     );
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Trust &amp; Safety console</h1>
-      {msg && <p className="text-sm text-accent">{msg}</p>}
+      <PageHeader title="Trust &amp; Safety" description="Fraud holds, reports and disputes." />
+      {msg && <p className="text-footnote text-accent">{msg}</p>}
 
       <section>
         <h2 className="mb-2 font-semibold">Fraud queue ({fraud.length})</h2>
@@ -100,29 +99,29 @@ export default function AdminPage() {
         ) : (
           <ul className="space-y-2">
             {fraud.map((f) => (
-              <li key={f.id} className="flex items-center justify-between rounded-lg border bg-surface p-3">
+              <li key={f.id} className="flex items-center justify-between rounded-lg bg-surface shadow-card p-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <Badge tone={f.riskScore >= 70 ? 'danger' : 'warn'}>risk {f.riskScore}</Badge>
-                    <span className="text-sm font-medium">{f.signal}</span>
+                    <span className="text-footnote font-medium">{f.signal}</span>
                   </div>
-                  <div className="text-xs text-muted">
+                  <div className="text-caption text-muted">
                     {f.user?.email ?? 'user'} · {timeAgo(f.createdAt)}
                   </div>
                 </div>
                 {f.listingId && (
                   <div className="flex gap-2">
-                    <Button className="px-2 py-1 text-xs" onClick={() => actOnListing(f.listingId!, 'APPROVE')}>
+                    <Button className="px-2 py-1 text-caption" onClick={() => actOnListing(f.listingId!, 'APPROVE')}>
                       Approve
                     </Button>
                     <Button
                       variant="outline"
-                      className="px-2 py-1 text-xs"
+                      className="px-2 py-1 text-caption"
                       onClick={() => actOnListing(f.listingId!, 'REJECT')}
                     >
                       Reject
                     </Button>
-                    <Link href={`/l/${f.listingId}`} className="self-center text-xs text-brand underline">
+                    <Link href={`/l/${f.listingId}`} className="self-center text-caption text-link hover:underline">
                       view
                     </Link>
                   </div>
@@ -140,21 +139,21 @@ export default function AdminPage() {
         ) : (
           <ul className="space-y-2">
             {reports.map((r) => (
-              <li key={r.id} className="flex items-center justify-between rounded-lg border bg-surface p-3">
+              <li key={r.id} className="flex items-center justify-between rounded-lg bg-surface shadow-card p-3">
                 <div>
-                  <span className="text-sm font-medium">{r.subjectType}</span>
-                  <div className="text-xs text-muted">
+                  <span className="text-footnote font-medium">{r.subjectType}</span>
+                  <div className="text-caption text-muted">
                     {r.reason} · {timeAgo(r.createdAt)}
                   </div>
                 </div>
                 {r.listingId && (
                   <div className="flex gap-2">
-                    <Button className="px-2 py-1 text-xs" onClick={() => actOnListing(r.listingId!, 'APPROVE')}>
+                    <Button className="px-2 py-1 text-caption" onClick={() => actOnListing(r.listingId!, 'APPROVE')}>
                       Dismiss
                     </Button>
                     <Button
                       variant="outline"
-                      className="px-2 py-1 text-xs"
+                      className="px-2 py-1 text-caption"
                       onClick={() => actOnListing(r.listingId!, 'REJECT')}
                     >
                       Remove
@@ -174,13 +173,13 @@ export default function AdminPage() {
         ) : (
           <ul className="space-y-2">
             {disputes.map((d) => (
-              <li key={d.id} className="rounded-lg border bg-surface p-3">
+              <li key={d.id} className="rounded-lg bg-surface shadow-card p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{d.reason}</span>
+                  <span className="text-footnote font-medium">{d.reason}</span>
                   <Badge tone="warn">{d.status}</Badge>
                 </div>
                 {d.order && (
-                  <div className="text-xs text-muted">
+                  <div className="text-caption text-muted">
                     Order {formatMoney(d.order.totalMinor, d.order.currency)}
                   </div>
                 )}

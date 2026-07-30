@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
 import { getSocket } from '@/lib/socket';
 import { timeAgo } from '@/lib/format';
-import { Button } from '@/components/ui';
+import { Button, Loading, SignInPrompt } from '@/components/ui';
 
 interface Notification {
   id: string;
@@ -56,18 +56,13 @@ export default function NotificationsPage() {
     await load();
   }
 
-  if (!ready) return <div className="text-muted">Loading…</div>;
-  if (!authed)
-    return (
-      <Link href="/login?next=/notifications" className="text-brand underline">
-        Sign in to view notifications
-      </Link>
-    );
+  if (!ready) return <Loading />;
+  if (!authed) return <SignInPrompt next="/notifications" what="your notifications" />;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Notifications</h1>
+        <h1 className="text-title font-semibold">Notifications</h1>
         {items.some((n) => !n.readAt) && (
           <Button variant="outline" onClick={markAllRead}>
             Mark all read
@@ -86,9 +81,9 @@ export default function NotificationsPage() {
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{n.title}</span>
-                  <span className="text-xs text-muted">{timeAgo(n.createdAt)}</span>
+                  <span className="text-caption text-muted">{timeAgo(n.createdAt)}</span>
                 </div>
-                {n.body && <p className="mt-0.5 text-sm text-muted">{n.body}</p>}
+                {n.body && <p className="mt-0.5 text-footnote text-muted">{n.body}</p>}
               </Link>
             </li>
           ))}
