@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
 import { getSocket } from '@/lib/socket';
+import { BellIcon } from './icons';
 
 /** Header bell: shows unread count, updates live on notification:new. */
 export function NotificationBell() {
@@ -34,10 +35,14 @@ export function NotificationBell() {
   if (count === null) return null;
 
   return (
-    <Link href="/notifications" aria-label="Notifications" className="relative rounded-md border px-2 py-1 text-sm hover:bg-border">
-      🔔
+    <Link
+      href="/notifications"
+      aria-label={count > 0 ? `Notifications, ${count} unread` : 'Notifications'}
+      className="relative inline-flex h-9 w-9 items-center justify-center rounded-pill text-muted transition-colors duration-200 hover:bg-sunken hover:text-text"
+    >
+      <BellIcon />
       {count > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
+        <span className="absolute right-1 top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-pill bg-danger px-1 text-[10px] font-semibold leading-none text-white">
           {count > 9 ? '9+' : count}
         </span>
       )}

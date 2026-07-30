@@ -83,6 +83,12 @@ export interface AttrField {
   unit?: string;
 }
 
+export interface TrustContribution {
+  key: string;
+  label: string;
+  points: number;
+}
+
 export interface ListingMedia {
   id: string;
   storageKey: string;
@@ -101,9 +107,12 @@ export interface Listing {
   attributes?: Record<string, unknown>;
   media?: ListingMedia[];
   locationText?: string | null;
+  /** Units still available to reserve. Absent on list responses. */
+  quantity: number;
   seller?: {
     profile?: { handle: string; displayName: string; avatarUrl?: string | null } | null;
-    trustScore?: { score: number } | null;
+    /** `factors` is the public, positive-only breakdown; detail responses only. */
+    trustScore?: { score: number; factors?: TrustContribution[] } | null;
     emailVerifiedAt?: string | null;
     phoneVerifiedAt?: string | null;
   };
@@ -111,12 +120,6 @@ export interface Listing {
 export interface Page<T> {
   items: T[];
   nextCursor: string | null;
-}
-
-export interface TrustContribution {
-  key: string;
-  label: string;
-  points: number;
 }
 
 export interface PublicProfile {

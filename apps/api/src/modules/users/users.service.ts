@@ -1,13 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
+import { publicTrustFactors, type TrustContribution } from '../trust/trust-factors';
 
-/** One line of the explainable trust breakdown shown on a public profile. */
-export interface TrustContribution {
-  key: string;
-  label: string;
-  points: number;
-}
+export type { TrustContribution };
 
 export interface PublicProfile {
   id: string;
@@ -25,29 +21,6 @@ export interface PublicProfile {
   completedSales: number;
   responseMins: number | null;
   followerCount: number;
-}
-
-// Public-facing labels for the constructive factors. Penalty factors
-// (`fraud`, `lostDisputes`) are internal risk signals and never surfaced.
-const PUBLIC_FACTOR_LABELS: Record<string, string> = {
-  emailVerified: 'Email verified',
-  phoneVerified: 'Phone verified',
-  identityVerified: 'Government ID verified',
-  businessVerified: 'Business verified',
-  completedSales: 'Completed sales',
-  rating: 'Buyer ratings',
-  tenure: 'Account longevity',
-};
-
-/** Turn the stored factor JSON into a public, positive-only, sorted breakdown. */
-function publicTrustFactors(factors: unknown): TrustContribution[] {
-  if (!factors || typeof factors !== 'object') return [];
-  const out: TrustContribution[] = [];
-  for (const [key, label] of Object.entries(PUBLIC_FACTOR_LABELS)) {
-    const points = (factors as Record<string, unknown>)[key];
-    if (typeof points === 'number' && points > 0) out.push({ key, label, points });
-  }
-  return out.sort((a, b) => b.points - a.points);
 }
 
 @Injectable()

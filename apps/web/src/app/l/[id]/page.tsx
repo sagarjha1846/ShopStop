@@ -4,7 +4,7 @@ import { api, ApiError, type Listing } from '@/lib/api';
 import { formatMoney, mediaUrl } from '@/lib/format';
 import { SellerTrustPanel } from '@/components/TrustPanel';
 import { WishlistButton } from '@/components/WishlistButton';
-import { Badge, LinkButton } from '@/components/ui';
+import { Badge, Card, LinkButton, Divider } from '@/components/ui';
 
 async function getListing(id: string): Promise<Listing | null> {
   try {
@@ -26,9 +26,20 @@ export async function generateMetadata({
   return {
     title: listing.title,
     description: listing.description?.slice(0, 160),
-    openGraph: { title: listing.title, images: mediaUrl(listing.media?.[0]?.storageKey) ?? undefined },
+    openGraph: {
+      title: listing.title,
+      images: mediaUrl(listing.media?.[0]?.storageKey) ?? undefined,
+    },
   };
 }
+
+const CONDITION_LABEL: Record<string, string> = {
+  NEW: 'New',
+  LIKE_NEW: 'Like new',
+  GOOD: 'Good',
+  FAIR: 'Fair',
+  FOR_PARTS: 'For parts',
+};
 
 export default async function ListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -40,6 +51,11 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
   if (seller?.emailVerifiedAt) badges.push('EMAIL');
   if (seller?.phoneVerifiedAt) badges.push('PHONE');
   const attrs = Object.entries(listing.attributes ?? {});
+  const media = listing.media?.length ? listing.media : [];
+  const soldOut = listing.status !== 'ACTIVE';
+  // Only surface scarcity when it's genuinely scarce — a countdown on every listing
+  // is pressure, not information.
+  const lowStock = !soldOut && listing.quantity > 0 && listing.quantity <= 5;
 
   // JSON-LD for SEO (Product + Offer).
   const jsonLd = {
@@ -51,80 +67,119 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
       '@type': 'Offer',
       price: (listing.priceMinor / 100).toFixed(2),
       priceCurrency: listing.currency,
-      availability: listing.status === 'ACTIVE' ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut',
+      availability: soldOut ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock',
     },
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+    <div className="grid gap-8 lg:grid-cols-[1fr_380px] lg:gap-12">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
 
       {/* Gallery + details */}
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-2">
-          {(listing.media?.length ? listing.media : [null]).map((m, i) => {
-            const url = mediaUrl(m?.storageKey);
-            return (
-              <div
-                key={m?.id ?? i}
-                className={`overflow-hidden rounded-lg border bg-border ${i === 0 ? 'col-span-2 aspect-video' : 'aspect-square'}`}
-              >
-                {url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={url} alt={listing.title} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-muted">No image</div>
-                )}
-              </div>
-            );
-          })}
+      <div>
+        <div className="grid grid-cols-2 gap-3">
+          {media.length > 0 ? (
+            media.map((m, i) => {
+              const url = mediaUrl(m.storageKey);
+              return (
+                <div
+                  key={m.id ?? i}
+                  className={`overflow-hidden rounded-lg bg-sunken ${
+                    i === 0 ? 'col-span-2 aspect-video' : 'aspect-square'
+                  }`}
+                >
+                  {url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt="" className="h-full w-full object-cover" />
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div aria-hidden className="col-span-2 aspect-video rounded-lg bg-sunken" />
+          )}
         </div>
 
+        <section className="mt-12">
+          <h2 className="mb-3 text-headline font-semibold">Description</h2>
+          <p className="max-w-prose whitespace-pre-line text-footnote leading-relaxed text-muted">
+            {listing.description}
+          </p>
+        </section>
+
         {attrs.length > 0 && (
-          <section>
-            <h2 className="mb-2 font-semibold">Specifications</h2>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-              {attrs.map(([k, v]) => (
-                <div key={k} className="flex justify-between border-b py-1">
-                  <dt className="capitalize text-muted">{k}</dt>
-                  <dd>{String(v)}</dd>
+          <section className="mt-12">
+            <h2 className="mb-3 text-headline font-semibold">Specifications</h2>
+            {/* Two even columns keep each value beside its label instead of flung to
+                the far edge of the measure. */}
+            <dl className="max-w-prose">
+              {attrs.map(([k, v], i) => (
+                <div key={k}>
+                  {i > 0 && <Divider />}
+                  <div className="grid grid-cols-2 gap-6 py-2.5">
+                    <dt className="text-caption capitalize text-muted">{k}</dt>
+                    <dd className="text-caption">{String(v)}</dd>
+                  </div>
                 </div>
               ))}
             </dl>
           </section>
         )}
-
-        <section>
-          <h2 className="mb-2 font-semibold">Description</h2>
-          <p className="whitespace-pre-line text-sm leading-relaxed">{listing.description}</p>
-        </section>
       </div>
 
-      {/* Sticky buy column */}
+      {/* Buy column: follows the reader down the gallery. */}
       <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-        <div className="rounded-lg border bg-surface p-4">
-          <h1 className="text-xl font-semibold">{listing.title}</h1>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-2xl font-bold">{formatMoney(listing.priceMinor, listing.currency)}</span>
+        <Card className="p-5">
+          <h1 className="text-title font-semibold">{listing.title}</h1>
+
+          <p className="tabular mt-3 text-title font-semibold">
+            {formatMoney(listing.priceMinor, listing.currency)}
+          </p>
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {listing.condition && (
+              <span className="text-caption text-muted">
+                {CONDITION_LABEL[listing.condition] ?? listing.condition}
+              </span>
+            )}
+            {listing.locationText && (
+              <span className="text-caption text-muted">· {listing.locationText}</span>
+            )}
             {listing.negotiable && <Badge tone="muted">Negotiable</Badge>}
           </div>
-          <div className="mt-1 text-sm text-muted">
-            {listing.condition ?? '—'} · {listing.locationText ?? '—'}
-          </div>
-          <div className="mt-4 flex flex-col gap-2">
-            <LinkButton href={`/login?next=/l/${listing.id}`}>Make an offer</LinkButton>
-            <LinkButton href={`/login?next=/l/${listing.id}`} variant="outline">
-              Chat with seller
+
+          {soldOut ? (
+            <p className="mt-4 text-caption text-muted">This listing is no longer available.</p>
+          ) : (
+            lowStock && (
+              <p className="mt-4 text-caption text-warn">
+                {listing.quantity === 1 ? 'Last one left' : `Only ${listing.quantity} left`}
+              </p>
+            )
+          )}
+
+          <div className="mt-5 flex flex-col gap-2">
+            <LinkButton href={`/login?next=/l/${listing.id}`} size="lg" aria-disabled={soldOut}>
+              {soldOut ? 'Sold out' : 'Buy now'}
             </LinkButton>
+            {!soldOut && (
+              <LinkButton href={`/login?next=/l/${listing.id}`} variant="secondary">
+                Make an offer
+              </LinkButton>
+            )}
             <WishlistButton listingId={listing.id} />
           </div>
-        </div>
+        </Card>
 
         {seller?.profile && (
           <SellerTrustPanel
             displayName={seller.profile.displayName}
             handle={seller.profile.handle}
             trustScore={seller.trustScore?.score ?? 0}
+            trustFactors={seller.trustScore?.factors}
             badges={badges}
             ratingAvg={0}
             ratingCount={0}

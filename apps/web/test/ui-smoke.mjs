@@ -54,7 +54,7 @@ try {
   ok('detail shows buy CTA', body.includes('Make an offer'));
 
   await page.goto(`${BASE}/`);
-  await page.click('button[aria-label="Toggle theme"]');
+  await page.click('[data-testid="theme-toggle"]');
   const theme = await page.getAttribute('html', 'data-theme');
   ok('theme toggle works', theme === 'dark' || theme === 'light', `theme=${theme}`);
 } catch (e) {

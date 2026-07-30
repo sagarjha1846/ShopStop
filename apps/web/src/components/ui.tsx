@@ -17,7 +17,9 @@ export function Container({
   className?: string;
 }) {
   const widths = { prose: 'max-w-prose', content: 'max-w-content', wide: 'max-w-wide' };
-  return <div className={`mx-auto w-full ${widths[width]} px-5 sm:px-6 ${className}`}>{children}</div>;
+  return (
+    <div className={`mx-auto w-full ${widths[width]} px-5 sm:px-6 ${className}`}>{children}</div>
+  );
 }
 
 /**
@@ -70,9 +72,7 @@ export function Card({
   className?: string;
   as?: 'div' | 'article' | 'li';
 }) {
-  return (
-    <Tag className={`rounded-lg bg-surface shadow-card ${className}`}>{children}</Tag>
-  );
+  return <Tag className={`rounded-lg bg-surface shadow-card ${className}`}>{children}</Tag>;
 }
 
 /** Horizontal hairline. Use where structure genuinely divides, not for rhythm. */

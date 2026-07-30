@@ -4,7 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { login } from '@/lib/auth-client';
-import { Button } from '@/components/ui';
+import { Button, Card, Field, inputClass } from '@/components/ui';
 
 function LoginForm() {
   const router = useRouter();
@@ -34,42 +34,54 @@ function LoginForm() {
   }
 
   return (
-    <div className="mx-auto max-w-sm space-y-4">
-      <h1 className="text-2xl font-bold">Welcome back</h1>
-      <form onSubmit={onSubmit} className="space-y-3">
-        <input
-          type="email"
-          required
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-md border bg-bg px-3 py-2 outline-none focus:ring-2 focus:ring-brand"
-        />
-        <input
-          type="password"
-          required
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-md border bg-bg px-3 py-2 outline-none focus:ring-2 focus:ring-brand"
-        />
-        {needMfa && (
-          <input
-            inputMode="numeric"
-            placeholder="6-digit MFA code"
-            value={mfaCode}
-            onChange={(e) => setMfaCode(e.target.value)}
-            className="w-full rounded-md border bg-bg px-3 py-2 outline-none focus:ring-2 focus:ring-brand"
-          />
-        )}
-        {error && <p className="text-sm text-danger">{error}</p>}
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? 'Signing in…' : 'Sign in'}
-        </Button>
-      </form>
-      <p className="text-sm text-muted">
+    <div className="mx-auto max-w-sm py-10">
+      <h1 className="mb-6 text-center text-title font-semibold">Sign in</h1>
+      <Card className="p-6">
+        <form onSubmit={onSubmit} className="space-y-4">
+          <Field label="Email">
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+          {needMfa && (
+            <Field label="Verification code" hint="From your authenticator app.">
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                className={`${inputClass} tabular`}
+              />
+            </Field>
+          )}
+          {error && (
+            <p role="alert" className="text-caption text-danger">
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </form>
+      </Card>
+      <p className="mt-5 text-center text-caption text-muted">
         New here?{' '}
-        <Link href="/register" className="text-brand underline">
+        <Link href="/register" className="text-link hover:underline">
           Create an account
         </Link>
       </p>
@@ -79,7 +91,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="text-muted">Loading…</div>}>
+    <Suspense fallback={<div className="py-10 text-center text-caption text-muted">Loading…</div>}>
       <LoginForm />
     </Suspense>
   );

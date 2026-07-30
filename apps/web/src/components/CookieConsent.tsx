@@ -23,9 +23,10 @@ export function CookieConsent() {
     localStorage.setItem(KEY, granted ? 'accepted' : 'rejected');
     setShow(false);
     if (getAccessToken()) {
-      await apiAuthed('/consents', { method: 'POST', body: { purpose: 'cookies_analytics', granted } }).catch(
-        () => undefined,
-      );
+      await apiAuthed('/consents', {
+        method: 'POST',
+        body: { purpose: 'cookies_analytics', granted },
+      }).catch(() => undefined);
     }
   }
 
@@ -44,8 +45,8 @@ export function CookieConsent() {
           Cookies on ShopStop
         </p>
         <p className="mt-1.5 text-caption text-muted">
-          Strictly necessary cookies keep the site working. Analytics cookies are only set if
-          you allow them.{' '}
+          Strictly necessary cookies keep the site working. Analytics cookies are only set if you
+          allow them.{' '}
           <Link href="/legal/cookies" className="text-link hover:underline">
             How we use cookies
           </Link>

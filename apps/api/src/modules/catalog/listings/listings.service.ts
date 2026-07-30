@@ -5,10 +5,28 @@ import { AppError } from '../../../common/errors/app-error';
 import { CategoriesService } from '../categories/categories.service';
 import { validateAttributes } from '../attribute-validator';
 import { RiskService } from '../../trust/risk.service';
+import { publicTrustFactors, type TrustContribution } from '../../trust/trust-factors';
 import { MediaScanProducer } from '../../../jobs/media-scan.producer';
 import { assertSellerTransition, isPubliclyVisible, type SellerListingAction } from './listing.state';
 import { ViewCounterService } from './view-counter.service';
 import type { CreateListingDto, UpdateListingDto } from './dto/listing.dto';
+
+/**
+ * What the public detail endpoint actually returns: the listing row plus its
+ * relations, with the seller's trust score reshaped to the public breakdown.
+ * Typed explicitly so the reshaping can't silently drift back to the raw row.
+ */
+export type PublicListing = Listing & {
+  media: unknown[];
+  variants: unknown[];
+  category: { id: string; slug: string; name: string };
+  seller: {
+    profile: unknown;
+    emailVerifiedAt: Date | null;
+    phoneVerifiedAt: Date | null;
+    trustScore: { score: number; factors: TrustContribution[] } | null;
+  };
+};
 
 export interface ListingQuery {
   cursor?: string;
@@ -211,7 +229,7 @@ export class ListingsService {
   }
 
   /** Public detail view: visible statuses to anyone; owner sees any own listing. */
-  async getPublic(listingId: string, viewerId?: string): Promise<Listing> {
+  async getPublic(listingId: string, viewerId?: string): Promise<PublicListing> {
     const listing = await this.prisma.listing.findFirst({
       where: { id: listingId, deletedAt: null },
       include: {
@@ -229,7 +247,22 @@ export class ListingsService {
     // put every reader in a lock queue on the same row that checkout reserves stock
     // on, so a popular listing's traffic would slow down its own sales.
     const pendingViews = await this.views.record(listing.id);
-    return { ...listing, viewCount: listing.viewCount + pendingViews };
+
+    // Reshape the seller's trust score into the same public, positive-only breakdown
+    // the profile endpoint serves. The stored JSON also holds internal risk penalties
+    // (fraud, lost disputes), which must not ride along on a public listing.
+    const trustScore = listing.seller.trustScore
+      ? {
+          score: listing.seller.trustScore.score,
+          factors: publicTrustFactors(listing.seller.trustScore.factors),
+        }
+      : null;
+
+    return {
+      ...listing,
+      viewCount: listing.viewCount + pendingViews,
+      seller: { ...listing.seller, trustScore },
+    };
   }
 
   /** Browse/list, cursor-paginated. Public browse restricts to visible statuses. */

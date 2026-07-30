@@ -37,8 +37,8 @@ export default async function HomePage() {
           <span className="text-muted">Know exactly who you&rsquo;re dealing with.</span>
         </h1>
         <p className="mx-auto mt-6 max-w-lg text-lead text-muted">
-          Every seller carries a trust score built from verified identity, real sales, and
-          resolved disputes. You can see how it was calculated.
+          Every seller carries a trust score built from verified identity, real sales, and resolved
+          disputes. You can see how it was calculated.
         </p>
         <div className="mt-9 flex flex-wrap justify-center gap-3">
           <LinkButton href="/search" size="lg">

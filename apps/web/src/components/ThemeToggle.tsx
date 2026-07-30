@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { SunIcon, MoonIcon } from './icons';
 
 /** Toggles data-theme on <html> and persists the choice. */
 export function ThemeToggle() {
@@ -24,10 +25,14 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      aria-label="Toggle theme"
-      className="rounded-md border px-2 py-1 text-sm hover:bg-border"
+      // Names the result, not the current state, so it reads correctly to a
+      // screen reader in both themes.
+      aria-label={theme === 'dark' ? 'Switch to light appearance' : 'Switch to dark appearance'}
+      // Stable hook so tests don't pin user-facing copy, which is free to change.
+      data-testid="theme-toggle"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-pill text-muted transition-colors duration-200 hover:bg-sunken hover:text-text"
     >
-      {theme === 'dark' ? '☀️' : '🌙'}
+      {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
     </button>
   );
 }

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
+import { Button } from './ui';
+import { HeartIcon } from './icons';
 
 /** Heart toggle on the listing page. No-op prompt to sign in if unauthenticated. */
 export function WishlistButton({ listingId }: { listingId: string }) {
@@ -15,7 +17,9 @@ export function WishlistButton({ listingId }: { listingId: string }) {
       setAuthed(ok);
       if (ok) {
         try {
-          const { wishlisted: w } = await apiAuthed<{ wishlisted: boolean }>(`/wishlist/${listingId}`);
+          const { wishlisted: w } = await apiAuthed<{ wishlisted: boolean }>(
+            `/wishlist/${listingId}`,
+          );
           setWishlisted(w);
         } catch {
           /* ignore */
@@ -46,14 +50,9 @@ export function WishlistButton({ listingId }: { listingId: string }) {
   }
 
   return (
-    <button
-      onClick={toggle}
-      disabled={busy}
-      aria-pressed={wishlisted}
-      className="inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition hover:bg-border"
-    >
-      <span className={wishlisted ? 'text-danger' : ''}>{wishlisted ? '♥' : '♡'}</span>
-      {wishlisted ? 'Saved' : 'Wishlist'}
-    </button>
+    <Button onClick={toggle} disabled={busy} aria-pressed={wishlisted} variant="ghost">
+      <HeartIcon filled={wishlisted} className={wishlisted ? 'text-danger' : ''} />
+      {wishlisted ? 'Saved' : 'Save'}
+    </Button>
   );
 }
