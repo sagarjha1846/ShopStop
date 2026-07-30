@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiAuthed, getAccessToken } from '@/lib/auth-client';
+import { Button } from './ui';
 
 const KEY = 'cookie-consent';
 
@@ -31,23 +32,31 @@ export function CookieConsent() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t bg-surface/95 p-4 backdrop-blur">
-      <div className="mx-auto flex max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted">
-          We use strictly necessary cookies to run ShopStop, and optional analytics cookies only with
-          your consent. See our{' '}
-          <Link href="/legal/cookies" className="text-brand underline">
-            Cookie Policy
-          </Link>
-          .
+    // A contained card pinned to the bottom corner, so it never lies across the page
+    // content the way a full-width bar does.
+    <div
+      role="dialog"
+      aria-labelledby="cookie-consent-title"
+      className="fixed inset-x-4 bottom-4 z-50 animate-rise-in sm:inset-x-auto sm:right-6 sm:bottom-6 sm:max-w-sm"
+    >
+      <div className="rounded-lg bg-surface p-5 shadow-lift">
+        <p id="cookie-consent-title" className="text-footnote font-semibold">
+          Cookies on ShopStop
         </p>
-        <div className="flex shrink-0 gap-2">
-          <button onClick={() => choose(false)} className="rounded-md border px-3 py-1.5 text-sm hover:bg-border">
-            Reject optional
-          </button>
-          <button onClick={() => choose(true)} className="rounded-md bg-brand px-3 py-1.5 text-sm text-brand-fg hover:opacity-90">
+        <p className="mt-1.5 text-caption text-muted">
+          Strictly necessary cookies keep the site working. Analytics cookies are only set if
+          you allow them.{' '}
+          <Link href="/legal/cookies" className="text-link hover:underline">
+            How we use cookies
+          </Link>
+        </p>
+        <div className="mt-4 flex gap-2">
+          <Button size="sm" onClick={() => choose(true)}>
             Accept all
-          </button>
+          </Button>
+          <Button size="sm" variant="secondary" onClick={() => choose(false)}>
+            Necessary only
+          </Button>
         </div>
       </div>
     </div>
