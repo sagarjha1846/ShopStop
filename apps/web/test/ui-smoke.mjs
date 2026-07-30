@@ -42,9 +42,9 @@ try {
   await page.fill('input[placeholder="Title"]', `UI Test Phone ${RUN}`);
   await page.fill('textarea', 'Created by the browser smoke test, in great condition.');
   await page.fill('input[placeholder="Price (₹)"]', '12345');
-  const brand = page.locator('label:has-text("Brand") + input');
+  const brand = page.locator('label:has-text("Brand") input');
   if (await brand.count()) await brand.fill('TestBrand');
-  const model = page.locator('label:has-text("Model") + input');
+  const model = page.locator('label:has-text("Model") input');
   if (await model.count()) await model.fill('TestModel');
   await Promise.all([page.waitForURL(/\/l\/.+/, { timeout: 10000 }), page.click('button[type=submit]')]);
   ok('authed listing create → detail page', /\/l\//.test(page.url()), page.url());

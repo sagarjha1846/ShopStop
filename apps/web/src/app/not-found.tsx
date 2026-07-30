@@ -1,13 +1,18 @@
-import Link from 'next/link';
+import { LinkButton } from '@/components/ui';
 
 export default function NotFound() {
   return (
-    <div className="mx-auto max-w-md py-16 text-center">
-      <h1 className="text-3xl font-bold">404</h1>
-      <p className="mt-2 text-muted">That page or listing doesn’t exist (or was removed).</p>
-      <Link href="/" className="mt-4 inline-block text-brand underline">
-        Back to home
-      </Link>
+    <div className="mx-auto max-w-md py-24 text-center">
+      <h1 className="text-title font-semibold">This page doesn&rsquo;t exist</h1>
+      <p className="mt-2 text-footnote text-muted">
+        The listing may have sold, or the link may be wrong.
+      </p>
+      <div className="mt-7 flex justify-center gap-3">
+        <LinkButton href="/search">Browse listings</LinkButton>
+        <LinkButton href="/" variant="secondary">
+          Go home
+        </LinkButton>
+      </div>
     </div>
   );
 }

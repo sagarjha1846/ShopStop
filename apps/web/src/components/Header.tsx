@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
-import { LinkButton, Container, inputClass } from './ui';
+import { AccountMenu } from './AccountMenu';
+import { Container, inputClass } from './ui';
 
 const NAV = [
   { href: '/search', label: 'Browse' },
@@ -56,9 +57,7 @@ export function Header() {
           <div className="ml-auto flex items-center gap-1 sm:ml-0">
             <NotificationBell />
             <ThemeToggle />
-            <LinkButton href="/login" size="sm">
-              Sign in
-            </LinkButton>
+            <AccountMenu />
           </div>
         </div>
       </Container>

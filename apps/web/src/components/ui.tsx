@@ -233,3 +233,49 @@ export function EmptyState({
 export function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-sunken ${className}`} />;
 }
+
+/** Page title block. Every page opens the same way so the app feels like one product. */
+export function PageHeader({
+  title,
+  description,
+  action,
+  className = '',
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <header className={`mb-6 flex flex-wrap items-end justify-between gap-3 ${className}`}>
+      <div>
+        <h1 className="text-title font-semibold">{title}</h1>
+        {description && <p className="mt-1 text-caption text-muted">{description}</p>}
+      </div>
+      {action}
+    </header>
+  );
+}
+
+/**
+ * Shown where a signed-out visitor lands on a personal page. It says what is behind
+ * the wall rather than just demanding a login.
+ */
+export function SignInPrompt({ next, what }: { next: string; what: string }) {
+  return (
+    <EmptyState
+      title={`Sign in to see ${what}`}
+      body="Your account keeps your orders, saved items and messages in one place."
+      action={<LinkButton href={`/login?next=${encodeURIComponent(next)}`}>Sign in</LinkButton>}
+    />
+  );
+}
+
+/** Quiet inline loading line. Deliberately plain — a spinner on every page is noise. */
+export function Loading({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <p role="status" className="py-16 text-center text-caption text-muted">
+      {label}
+    </p>
+  );
+}

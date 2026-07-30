@@ -4,7 +4,15 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
 import { formatMoney } from '@/lib/format';
-import { Badge } from '@/components/ui';
+import {
+  Badge,
+  Card,
+  EmptyState,
+  LinkButton,
+  Loading,
+  PageHeader,
+  SignInPrompt,
+} from '@/components/ui';
 
 interface Order {
   id: string;
@@ -27,6 +35,23 @@ interface Me {
   profile?: { handle: string; displayName: string } | null;
   trustScore?: { score: number } | null;
 }
+
+// Name states the way a person would, not the way the database does.
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Awaiting payment',
+  ACCEPTED: 'Paid',
+  PACKED: 'Packed',
+  SHIPPED: 'Shipped',
+  DELIVERED: 'Delivered',
+  CANCELLED: 'Cancelled',
+  REJECTED: 'Declined',
+  REFUNDED: 'Refunded',
+  ACTIVE: 'Live',
+  SOLD: 'Sold',
+  DRAFT: 'Draft',
+  PAUSED: 'Paused',
+  PENDING_REVIEW: 'In review',
+};
 
 const STATUS_TONE: Record<string, 'muted' | 'success' | 'warn' | 'danger' | 'brand'> = {
   PENDING: 'warn',
@@ -75,87 +100,112 @@ export default function DashboardPage() {
     })();
   }, []);
 
-  if (!ready) return <div className="text-muted">Loading…</div>;
-  if (!authed)
-    return (
-      <div className="mx-auto max-w-sm space-y-3 text-center">
-        <p>Please sign in to view your dashboard.</p>
-        <Link href="/login?next=/dashboard" className="text-brand underline">
-          Sign in
-        </Link>
-      </div>
-    );
+  if (!ready) return <Loading />;
+  if (!authed) return <SignInPrompt next="/dashboard" what="your dashboard" />;
 
   const orders = tab === 'buying' ? buying : selling;
+  const TABS = [
+    ['buying', 'Buying', buying.length],
+    ['selling', 'Selling', selling.length],
+    ['listings', 'My listings', listings.length],
+  ] as const;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        {me?.profile && (
-          <Link href={`/u/${me.profile.handle}`} className="text-sm text-brand underline">
-            View public profile
-          </Link>
-        )}
-      </div>
+    <div className="py-4">
+      <PageHeader
+        title="Dashboard"
+        action={
+          me?.profile && (
+            <LinkButton href={`/u/${me.profile.handle}`} variant="secondary" size="sm">
+              View public profile
+            </LinkButton>
+          )
+        }
+      />
 
-      <div className="flex gap-2 border-b">
-        {(['buying', 'selling', 'listings'] as const).map((t) => (
+      {/* Segmented control: the selected tab is a filled pill, not an underline. */}
+      <div
+        role="tablist"
+        aria-label="Dashboard sections"
+        className="mb-6 inline-flex gap-1 rounded-pill bg-sunken p-1"
+      >
+        {TABS.map(([key, label, count]) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-3 py-2 text-sm capitalize ${tab === t ? 'border-b-2 border-brand font-medium' : 'text-muted'}`}
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={`rounded-pill px-4 py-1.5 text-caption font-medium transition-colors duration-200 ${
+              tab === key ? 'bg-surface text-text shadow-card' : 'text-muted hover:text-text'
+            }`}
           >
-            {t === 'listings' ? 'My listings' : t}
+            {label}
+            {count > 0 && <span className="tabular ml-1.5 text-faint">{count}</span>}
           </button>
         ))}
       </div>
 
       {tab !== 'listings' ? (
         orders.length === 0 ? (
-          <p className="text-muted">No orders yet.</p>
+          <EmptyState
+            title={tab === 'buying' ? 'No purchases yet' : 'No sales yet'}
+            body={
+              tab === 'buying'
+                ? 'Orders you place will show up here with their delivery status.'
+                : 'When someone buys one of your listings, the order appears here.'
+            }
+            action={
+              <LinkButton href={tab === 'buying' ? '/search' : '/sell'}>
+                {tab === 'buying' ? 'Browse listings' : 'Create a listing'}
+              </LinkButton>
+            }
+          />
         ) : (
           <ul className="space-y-2">
             {orders.map((o) => (
-              <li key={o.id} className="flex items-center justify-between rounded-lg border bg-surface p-3">
-                <div>
-                  <Link href={`/l/${o.listing?.id}`} className="font-medium hover:underline">
-                    {o.listing?.title ?? 'Listing'}
-                  </Link>
-                  <div className="text-sm text-muted">
-                    {formatMoney(o.totalMinor, o.currency)}
-                    {o.payment?.status ? ` · ${o.payment.status.toLowerCase()}` : ''}
+              <Card key={o.id} as="li">
+                <Link
+                  href={`/orders/${o.id}`}
+                  className="flex items-center justify-between gap-4 p-4"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-footnote font-medium">
+                      {o.listing?.title ?? 'Listing'}
+                    </p>
+                    <p className="tabular mt-0.5 text-caption text-muted">
+                      {formatMoney(o.totalMinor, o.currency)}
+                    </p>
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge tone={STATUS_TONE[o.status] ?? 'muted'}>{o.status}</Badge>
-                  <Link href={`/orders/${o.id}`} className="text-sm text-brand hover:underline">
-                    Details →
-                  </Link>
-                </div>
-              </li>
+                  <Badge tone={STATUS_TONE[o.status] ?? 'muted'}>
+                    {STATUS_LABEL[o.status] ?? o.status}
+                  </Badge>
+                </Link>
+              </Card>
             ))}
           </ul>
         )
       ) : listings.length === 0 ? (
-        <p className="text-muted">
-          No listings yet.{' '}
-          <Link href="/sell" className="text-brand underline">
-            Create one.
-          </Link>
-        </p>
+        <EmptyState
+          title="You haven't listed anything"
+          body="Listing takes about a minute, and verified sellers sell faster."
+          action={<LinkButton href="/sell">Create a listing</LinkButton>}
+        />
       ) : (
         <ul className="space-y-2">
           {listings.map((l) => (
-            <li key={l.id} className="flex items-center justify-between rounded-lg border bg-surface p-3">
-              <Link href={`/l/${l.id}`} className="font-medium hover:underline">
-                {l.title}
+            <Card key={l.id} as="li">
+              <Link href={`/l/${l.id}`} className="flex items-center justify-between gap-4 p-4">
+                <p className="min-w-0 truncate text-footnote font-medium">{l.title}</p>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="tabular text-caption">
+                    {formatMoney(l.priceMinor, l.currency)}
+                  </span>
+                  <Badge tone={STATUS_TONE[l.status] ?? 'muted'}>
+                    {STATUS_LABEL[l.status] ?? l.status}
+                  </Badge>
+                </div>
               </Link>
-              <div className="flex items-center gap-3">
-                <span className="text-sm">{formatMoney(l.priceMinor, l.currency)}</span>
-                <Badge tone={STATUS_TONE[l.status] ?? 'muted'}>{l.status}</Badge>
-              </div>
-            </li>
+            </Card>
           ))}
         </ul>
       )}

@@ -48,6 +48,21 @@ export async function register(email: string, password: string, displayName?: st
   return data;
 }
 
+/**
+ * End the session. Revokes the refresh session server-side (so the httpOnly cookie
+ * can't be replayed) and drops the in-memory access token. The local token is
+ * cleared even if the server call fails, so a network error can't strand someone
+ * signed in on a shared machine.
+ */
+export async function logout(): Promise<void> {
+  try {
+    await apiAuthed('/auth/logout', { method: 'POST', body: {} });
+  } catch {
+    /* revoke is best-effort; clearing locally is the part that must always happen */
+  }
+  setAccessToken(null);
+}
+
 export async function refresh(): Promise<boolean> {
   try {
     const data = await post<{ accessToken: string }>('/auth/refresh', {});

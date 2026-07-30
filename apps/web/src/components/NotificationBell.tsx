@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
 import { getSocket } from '@/lib/socket';
 import { BellIcon } from './icons';
@@ -9,8 +10,12 @@ import { BellIcon } from './icons';
 /** Header bell: shows unread count, updates live on notification:new. */
 export function NotificationBell() {
   const [count, setCount] = useState<number | null>(null);
+  // The header never remounts on client navigation, so without this the bell stays
+  // hidden for the rest of the session after someone signs in.
+  const pathname = usePathname();
 
   useEffect(() => {
+    if (count !== null) return;
     let cancelled = false;
     (async () => {
       const ok = getAccessToken() ? true : await refresh();
@@ -29,7 +34,9 @@ export function NotificationBell() {
     return () => {
       cancelled = true;
     };
-  }, []);
+    // `count` is intentionally excluded: it is a run-once guard, not an input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   // Hidden until we know the user is signed in.
   if (count === null) return null;

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { api, ApiError, type PublicProfile } from '@/lib/api';
 import { SellerTrustPanel } from '@/components/TrustPanel';
 import { timeAgo } from '@/lib/format';
+import { Card, EmptyState } from '@/components/ui';
 
 interface Review {
   id: string;
@@ -39,7 +40,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ handle
   const reviews = await api<Review[]>(`/reviews/user/${profile.id}`, { cache: 'no-store' }).catch(() => []);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+    <div className="grid gap-8 py-4 lg:grid-cols-[360px_1fr] lg:gap-12">
       <SellerTrustPanel
         displayName={profile.displayName}
         handle={profile.handle}
@@ -53,25 +54,30 @@ export default async function ProfilePage({ params }: { params: Promise<{ handle
         memberSince={profile.memberSince}
       />
       <div>
-        <h2 className="mb-3 text-lg font-semibold">Reviews</h2>
+        <h2 className="mb-4 text-headline font-semibold">
+          Reviews{reviews.length > 0 && <span className="ml-2 text-caption font-normal text-faint">{reviews.length}</span>}
+        </h2>
         {reviews.length === 0 ? (
-          <p className="text-muted">No reviews yet.</p>
+          <EmptyState
+            title="No reviews yet"
+            body={`Reviews appear here once ${profile.displayName} completes a sale.`}
+          />
         ) : (
           <ul className="space-y-3">
             {reviews.map((r) => (
-              <li key={r.id} className="rounded-lg border bg-surface p-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    {'★'.repeat(r.rating)}
-                    <span className="text-border">{'★'.repeat(5 - r.rating)}</span>
+              <Card key={r.id} as="li" className="p-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span aria-label={`${r.rating} out of 5`} className="text-footnote">
+                    <span className="text-warn">{'\u2605'.repeat(r.rating)}</span>
+                    <span className="text-faint">{'\u2605'.repeat(5 - r.rating)}</span>
                   </span>
-                  <span className="text-xs text-muted">{timeAgo(r.createdAt)}</span>
+                  <span className="text-caption text-faint">{timeAgo(r.createdAt)}</span>
                 </div>
-                {r.body && <p className="mt-1 text-sm">{r.body}</p>}
-                <p className="mt-1 text-xs text-muted">
-                  by @{r.author?.profile?.handle ?? 'user'}
+                {r.body && <p className="mt-2 text-footnote">{r.body}</p>}
+                <p className="mt-2 text-caption text-faint">
+                  @{r.author?.profile?.handle ?? 'user'}
                 </p>
-              </li>
+              </Card>
             ))}
           </ul>
         )}

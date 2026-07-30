@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { getAccessToken, refresh } from '@/lib/auth-client';
 import type { AttrField, Category } from '@/lib/api';
-import { Button } from '@/components/ui';
+import { Button, Card, Field, inputClass, Loading, SignInPrompt } from '@/components/ui';
 
 async function authedFetch(path: string, init?: RequestInit) {
   const token = getAccessToken();
@@ -86,103 +85,109 @@ export default function SellPage() {
     }
   }
 
-  if (!ready) return <div className="text-muted">Loading…</div>;
-  if (!authed)
-    return (
-      <div className="mx-auto max-w-sm space-y-3 text-center">
-        <p>You need to sign in to create a listing.</p>
-        <Link href="/login?next=/sell" className="text-brand underline">
-          Sign in
-        </Link>
-      </div>
-    );
+  if (!ready) return <Loading />;
+  if (!authed) return <SignInPrompt next="/sell" what="the seller tools" />;
 
   return (
-    <div className="mx-auto max-w-xl space-y-4">
-      <h1 className="text-2xl font-bold">Create a listing</h1>
-      <form onSubmit={onSubmit} className="space-y-3">
-        <select
-          required
-          value={categoryId}
-          onChange={(e) => {
-            setCategoryId(e.target.value);
-            setAttrs({});
-          }}
-          className="w-full rounded-md border bg-bg px-3 py-2"
-        >
-          <option value="">Select a category…</option>
-          {flat.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.label}
-            </option>
+    <div className="mx-auto max-w-xl py-4">
+      <h1 className="mb-1 text-title font-semibold">Create a listing</h1>
+      <p className="mb-6 text-caption text-muted">
+        Publishing runs automated risk checks. High-risk listings are held for review before
+        they go live.
+      </p>
+
+      <Card className="p-6">
+        <form onSubmit={onSubmit} className="space-y-4">
+          <Field label="Category">
+            <select
+              required
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setAttrs({});
+              }}
+              className={inputClass}
+            >
+              <option value="">Select a category…</option>
+              {flat.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Title" hint="What you'd call it if a friend asked.">
+            <input
+              required
+              placeholder="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+
+          <Field label="Description" hint="Condition, what's included, anything a buyer should know.">
+            <textarea
+              required
+              placeholder="Describe your item…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              className={inputClass}
+            />
+          </Field>
+
+          <Field label="Price">
+            <input
+              required
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Price (₹)"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className={`${inputClass} tabular`}
+            />
+          </Field>
+
+          {/* Category-specific attributes rendered from the schema (data-driven). */}
+          {selected?.fields.map((f) => (
+            <Field key={f.key} label={f.required ? `${f.label} (required)` : f.label}>
+              {f.type === 'select' ? (
+                <select
+                  value={attrs[f.key] ?? ''}
+                  onChange={(e) => setAttrs((a) => ({ ...a, [f.key]: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="">—</option>
+                  {f.options?.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={f.type === 'number' ? 'number' : 'text'}
+                  value={attrs[f.key] ?? ''}
+                  onChange={(e) => setAttrs((a) => ({ ...a, [f.key]: e.target.value }))}
+                  className={inputClass}
+                />
+              )}
+            </Field>
           ))}
-        </select>
 
-        <input
-          required
-          placeholder="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-md border bg-bg px-3 py-2"
-        />
-        <textarea
-          required
-          placeholder="Describe your item…"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={4}
-          className="w-full rounded-md border bg-bg px-3 py-2"
-        />
-        <input
-          required
-          type="number"
-          min={0}
-          step="0.01"
-          placeholder="Price (₹)"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          className="w-full rounded-md border bg-bg px-3 py-2"
-        />
-
-        {/* Category-specific attributes rendered from the schema (data-driven). */}
-        {selected?.fields.map((f) => (
-          <div key={f.key}>
-            <label className="mb-1 block text-sm text-muted">
-              {f.label}
-              {f.required && ' *'}
-            </label>
-            {f.type === 'select' ? (
-              <select
-                value={attrs[f.key] ?? ''}
-                onChange={(e) => setAttrs((a) => ({ ...a, [f.key]: e.target.value }))}
-                className="w-full rounded-md border bg-bg px-3 py-2"
-              >
-                <option value="">—</option>
-                {f.options?.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type={f.type === 'number' ? 'number' : 'text'}
-                value={attrs[f.key] ?? ''}
-                onChange={(e) => setAttrs((a) => ({ ...a, [f.key]: e.target.value }))}
-                className="w-full rounded-md border bg-bg px-3 py-2"
-              />
-            )}
-          </div>
-        ))}
-
-        {error && <p className="text-sm text-danger">{error}</p>}
-        <Button type="submit" disabled={submitting} className="w-full">
-          {submitting ? 'Publishing…' : 'Publish listing'}
-        </Button>
-        <p className="text-xs text-muted">
-          Publishing runs automated risk checks. High-risk listings are held for review.
-        </p>
-      </form>
+          {error && (
+            <p role="alert" className="text-caption text-danger">
+              {error}
+            </p>
+          )}
+          <Button type="submit" disabled={submitting} className="w-full">
+            {submitting ? 'Publishing…' : 'Publish listing'}
+          </Button>
+        </form>
+      </Card>
     </div>
   );
 }
