@@ -16,9 +16,13 @@ RUN pnpm install --filter @shopstop/api... --frozen-lockfile
 # Build.
 COPY tsconfig.base.json ./
 COPY apps/api apps/api
+# `--legacy` is required from pnpm v10: `deploy` now expects the workspace to set
+# inject-workspace-packages=true, and errors out otherwise. This app has no
+# workspace-package dependencies to inject, so the legacy (copy) behaviour is the
+# one we actually want.
 RUN pnpm --filter @shopstop/api exec prisma generate \
   && pnpm --filter @shopstop/api build \
-  && pnpm --filter @shopstop/api --prod deploy /out
+  && pnpm --filter @shopstop/api --prod --legacy deploy /out
 
 # ---- runtime ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
