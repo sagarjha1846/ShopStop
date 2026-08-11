@@ -112,7 +112,7 @@ export class PaymentsService {
       this.logger.warn(`Capture webhook for unknown providerOrderId ${providerOrderId}`);
       return;
     }
-    if (payment.status === PaymentStatus.CAPTURED) return; // idempotent replay
+    if (payment.status === PaymentStatus.CAPTURED) return; // fast path for replays
 
     // Guard against amount tampering: captured amount must match what we charged.
     if (amountMinor !== undefined && amountMinor !== payment.amountMinor) {
@@ -120,9 +120,18 @@ export class PaymentsService {
       throw AppError.conflict('Captured amount does not match order');
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: { id: payment.id },
+    const order = await this.prisma.order.findUnique({
+      where: { id: payment.orderId },
+      select: { sellerId: true, feeMinor: true },
+    });
+
+    const booked = await this.prisma.$transaction(async (tx) => {
+      // Compare-and-set inside the transaction. The status check above is only a
+      // fast path: gateways retry webhooks concurrently, and two deliveries that
+      // both read AUTHORIZED would otherwise each write a ledger row and book the
+      // revenue twice. Exactly one caller can move the row out of AUTHORIZED.
+      const claimed = await tx.payment.updateMany({
+        where: { id: payment.id, status: { not: PaymentStatus.CAPTURED } },
         data: {
           status: PaymentStatus.CAPTURED,
           providerPaymentId,
@@ -130,6 +139,9 @@ export class PaymentsService {
           idempotencyKey: providerPaymentId ?? payment.idempotencyKey,
         },
       });
+      if (claimed.count === 0) return false;
+
+      // Gross inflow from the buyer.
       await tx.transaction.create({
         data: {
           orderId: payment.orderId,
@@ -139,10 +151,30 @@ export class PaymentsService {
           providerRef: providerPaymentId,
         },
       });
+
+      // The platform's commission, booked against the seller's proceeds. Without
+      // this row the fee exists only as a number on the order and never lands in
+      // the ledger, so platform revenue can't be reconciled or reported.
+      if (order && order.feeMinor > 0) {
+        await tx.transaction.create({
+          data: {
+            orderId: payment.orderId,
+            userId: order.sellerId,
+            type: TransactionType.FEE,
+            amountMinor: order.feeMinor,
+            currency: payment.currency,
+            providerRef: providerPaymentId,
+            meta: { basis: 'order.commission' },
+          },
+        });
+      }
+      return true;
     });
 
+    if (!booked) return; // a concurrent delivery won the race and already booked it
+
     await this.orders.markPaid(payment.orderId);
-    this.logger.log(`Payment captured for order ${payment.orderId}`);
+    this.logger.log(`Payment captured for order ${payment.orderId} (fee ${order?.feeMinor ?? 0})`);
   }
 
   private async onFailed(providerOrderId?: string): Promise<void> {

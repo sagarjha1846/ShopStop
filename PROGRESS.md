@@ -80,9 +80,20 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Verified live: SSR pages render with seeded data; all client pages 200; next build clean (12 routes)
 - [x] Browser smoke (Chromium): register→cookie→sell→create→detail→theme 7/7; admin console loads live queue
 
+## Phase 8 — Monetization (making the business real)
+- [x] Platform commission booked to the ledger: FEE transaction written atomically with
+      CHARGE on capture; take rate moved to config (PLATFORM_FEE_BPS) and snapshotted per
+      order so rate changes never re-price history — verified 20/20
+- [x] Fixed a money bug: capture used read-then-write, so concurrent duplicate webhook
+      deliveries each wrote ledger rows (measured: 4 deliveries → 4× GMV and 4× fee).
+      Now a compare-and-set inside the transaction; exactly one delivery books.
+- [x] Seller earnings API + dashboard panel (gross / platform fee / net, settled vs in-flight)
+- [x] Admin revenue API + console panel (GMV, fee revenue, take rate, AOV, daily series),
+      ADMIN-only (moderators excluded)
+
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 9 black-box E2E suites (~82 API checks); CI runs unit +
-      commerce/trust/notification-preferences E2E
+- [x] Test suites: 41 unit + 9 black-box E2E suites (97 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
@@ -122,3 +133,15 @@ Design package (docs/) is complete; this tracks **implementation**.
   the worker logged every failed send as complete and BullMQ's configured 3-attempt backoff
   never fired — now it propagates. Verified live: 13/13 new E2E, 41 unit tests, all 9 E2E
   suites green (no regressions), preference centre driven in Chromium, both apps build clean.
+- S9: Monetization. The platform computed a 2% fee onto every order and then never booked
+  it — `TransactionType.FEE` was declared but never written, so revenue existed nowhere in
+  the ledger and no one could answer "what did we earn?". Booked the commission atomically
+  with the charge, moved the take rate to config, and added seller earnings + an admin
+  revenue summary (both read from the ledger, not restated from the order table).
+  Found and fixed a real money bug while testing: capture did read-then-write on payment
+  status, so concurrent duplicate webhook deliveries (which gateways do routinely) each
+  wrote ledger rows — measured 4× GMV and 4× fee from 4 parallel deliveries, now exactly
+  once via compare-and-set. Also fixed two pre-existing test defects that only appear on
+  reruns: suites tripping the listing-velocity risk rule, and cashfree.e2e hardcoding a
+  cf_payment_id that lands in a unique column. Verified: 20/20 revenue E2E, all 9 suites
+  green (97 checks), 41 unit tests, earnings + revenue panels driven in Chromium.

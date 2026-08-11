@@ -49,6 +49,13 @@ export const envSchema = z.object({
   RATE_LIMIT_WINDOW_SEC: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
 
+  // Platform take rate in basis points (200 = 2.00%). The business changes this
+  // without a code change; 10_000 bps = 100% is the hard ceiling.
+  PLATFORM_FEE_BPS: z.coerce.number().int().min(0).max(10_000).default(200),
+  // Boost price per day, in minor units (₹49.00/day). Sponsored placement is
+  // sold, not given away.
+  BOOST_PRICE_PER_DAY_MINOR: z.coerce.number().int().min(0).default(4900),
+
   OTP_TTL_SEC: z.coerce.number().int().positive().default(300),
   OTP_DEV_LOG: z
     .enum(['true', 'false'])

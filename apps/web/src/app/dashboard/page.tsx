@@ -27,6 +27,19 @@ interface Me {
   profile?: { handle: string; displayName: string } | null;
   trustScore?: { score: number } | null;
 }
+interface EarningsSplit {
+  grossMinor: number;
+  feeMinor: number;
+  netMinor: number;
+  orders: number;
+}
+interface Earnings {
+  currency: string;
+  feeBps: number;
+  settled: EarningsSplit;
+  pending: EarningsSplit;
+  lifetimeNetMinor: number;
+}
 
 const STATUS_TONE: Record<string, 'muted' | 'success' | 'warn' | 'danger' | 'brand'> = {
   PENDING: 'warn',
@@ -50,6 +63,7 @@ export default function DashboardPage() {
   const [buying, setBuying] = useState<Order[]>([]);
   const [selling, setSelling] = useState<Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
+  const [earnings, setEarnings] = useState<Earnings | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -59,14 +73,16 @@ export default function DashboardPage() {
         try {
           const meData = await apiAuthed<Me>('/me/profile');
           setMe(meData);
-          const [b, s, l] = await Promise.all([
+          const [b, s, l, e] = await Promise.all([
             apiAuthed<Order[]>('/orders?role=buyer'),
             apiAuthed<Order[]>('/orders?role=seller'),
             apiAuthed<{ items: Listing[] }>(`/listings?sellerId=${meData.id}`),
+            apiAuthed<Earnings>('/me/earnings'),
           ]);
           setBuying(b);
           setSelling(s);
           setListings(l.items);
+          setEarnings(e);
         } catch {
           /* ignore; show empty */
         }
@@ -98,6 +114,45 @@ export default function DashboardPage() {
           </Link>
         )}
       </div>
+
+      {earnings && (earnings.settled.orders > 0 || earnings.pending.orders > 0) && (
+        <div className="rounded-lg border bg-surface p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-semibold">Earnings</h2>
+            <span className="text-xs text-muted">
+              Platform fee {(earnings.feeBps / 100).toFixed(2)}%
+            </span>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Paid out to you</dt>
+              <dd className="text-lg font-semibold text-success">
+                {formatMoney(earnings.settled.netMinor, earnings.currency)}
+              </dd>
+              <p className="text-xs text-muted">{earnings.settled.orders} order(s)</p>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Sales (gross)</dt>
+              <dd className="text-lg font-semibold">
+                {formatMoney(earnings.settled.grossMinor, earnings.currency)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Platform fees</dt>
+              <dd className="text-lg font-semibold text-muted">
+                −{formatMoney(earnings.settled.feeMinor, earnings.currency)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">In flight</dt>
+              <dd className="text-lg font-semibold">
+                {formatMoney(earnings.pending.netMinor, earnings.currency)}
+              </dd>
+              <p className="text-xs text-muted">{earnings.pending.orders} awaiting payment</p>
+            </div>
+          </dl>
+        </div>
+      )}
 
       <div className="flex gap-2 border-b">
         {(['buying', 'selling', 'listings'] as const).map((t) => (

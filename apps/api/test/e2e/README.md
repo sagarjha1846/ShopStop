@@ -14,6 +14,7 @@ as executable documentation of the happy paths + guardrails.
 node test/e2e/commerce.e2e.mjs   # offers → order → payment webhook → fulfilment → review
 node test/e2e/trust.e2e.mjs      # risk hold → moderation queue (RBAC) → reject/approve → profile
 node test/e2e/notification-preferences.e2e.mjs  # preference centre gates delivery
+node test/e2e/revenue.e2e.mjs    # commission booked to the ledger → earnings + admin revenue
 # realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
 node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
@@ -31,6 +32,10 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   suppresses in-app delivery, re-enabling restores it, unrelated categories keep
   firing, locked security categories and unknown categories rejected (422),
   per-user isolation, preferences present in the DSAR export.
+- **revenue**: commission priced onto the order, CHARGE + FEE booked to the
+  ledger on capture, replayed *and* concurrent duplicate webhooks book exactly
+  once, seller earnings (gross/fee/net, settled vs in-flight), admin revenue
+  summary (GMV, fee revenue, take rate, daily series), admin-only authorization.
 
 CI runs these against an ephemeral stack (see `.github/workflows/ci.yml`, extended
 in Phase 7). For a typed integration suite, these can be ported to Jest + supertest.

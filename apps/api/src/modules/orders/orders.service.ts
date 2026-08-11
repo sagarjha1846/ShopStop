@@ -5,6 +5,7 @@ import { AppError } from '../../common/errors/app-error';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { TrustScoreService } from '../trust/trust-score.service';
+import { AppConfigService } from '../../config/config.service';
 import { resolveTransition, type OrderAction, type OrderActor } from './order.state';
 import type { CreateOrderDto } from './dto/order.dto';
 
@@ -17,15 +18,22 @@ interface TimelineEntry {
 
 @Injectable()
 export class OrdersService {
-  // Platform take-rate in basis points. MVP: small facilitation fee; tune per docs/18.
-  private static readonly PLATFORM_FEE_BPS = 200; // 2%
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly coupons: CouponsService,
     private readonly trust: TrustScoreService,
+    private readonly config: AppConfigService,
   ) {}
+
+  /**
+   * Platform take-rate in basis points, from config so the business can retune it
+   * without a deploy of code logic (docs/18). The rate is read per order and
+   * snapshotted onto the row, so changing it never re-prices historical orders.
+   */
+  private get platformFeeBps(): number {
+    return this.config.get('PLATFORM_FEE_BPS');
+  }
 
   async create(buyerId: string, dto: CreateOrderDto): Promise<Order> {
     const listing = await this.prisma.listing.findFirst({
@@ -55,8 +63,10 @@ export class OrdersService {
       couponId = applied.couponId;
     }
 
-    const feeMinor = Math.round(((subtotalMinor - discountMinor) * OrdersService.PLATFORM_FEE_BPS) / 10_000);
-    const totalMinor = subtotalMinor - discountMinor; // buyer pays subtotal minus discount
+    // Buyer pays subtotal minus discount; the platform's cut comes out of the
+    // seller's proceeds, so the fee is computed on the discounted amount.
+    const totalMinor = subtotalMinor - discountMinor;
+    const feeMinor = Math.round((totalMinor * this.platformFeeBps) / 10_000);
 
     const timeline: TimelineEntry[] = [
       { status: OrderStatus.PENDING, actor: 'buyer', at: new Date().toISOString() },

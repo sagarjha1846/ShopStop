@@ -15,7 +15,18 @@ const seller = await login('admin@shopstop.local', 'AdminPass123!');
 const buyer = (await j('POST', '/auth/register', { body: { email: `cf_${RUN}@example.com`, password: 'cfpass123456' } })).data.accessToken;
 const cats = (await j('GET', '/categories')).data;
 const catId = cats.find((c) => c.slug === 'electronics').children.find((c) => c.slug === 'mobile-phones').id;
+// The risk engine holds listings when the seller's recent listing velocity is high,
+// which repeated runs against the shared demo seller will trigger. Approve so this
+// suite tests its own subject rather than the risk engine.
+async function ensureActive(listing, adminToken) {
+  if (listing?.status === 'PENDING_REVIEW') {
+    await j('POST', `/admin/moderation/LISTING/${listing.id}/action`, { token: adminToken, body: { decision: 'APPROVE' } });
+  }
+  return listing;
+}
+
 const listing = (await j('POST', '/listings', { token: seller, body: { categoryId: catId, title: `CF Phone ${RUN}`, description: 'cashfree test listing', priceMinor: 700000, quantity: 3, attributes: { brand: 'B', model: 'M', storage: '128GB' }, publish: true } })).data;
+await ensureActive(listing, seller);
 const order = (await j('POST', '/orders', { token: buyer, key: `o-${RUN}`, body: { listingId: listing.id } })).data;
 
 // Create a CASHFREE intent (proves provider selection through the same service).
@@ -23,7 +34,10 @@ const intent = await j('POST', '/payments/intent', { token: buyer, key: `p-${RUN
 ok('cashfree intent created', intent.status === 200 && intent.data.provider === 'CASHFREE' && intent.data.providerOrderId.startsWith('cf_order_dev_'), `pid=${intent.data?.providerOrderId}`);
 
 // Cashfree-signed webhook: base64(HMAC-SHA256(secret, timestamp + rawBody)).
-const evt = { type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: intent.data.providerOrderId }, payment: { cf_payment_id: 987654, payment_amount: 7000, payment_status: 'SUCCESS', payment_group: 'upi' } } };
+// cf_payment_id must be unique per run: it is stored as Payment.idempotencyKey,
+// which is a unique column — a hardcoded id makes this suite pass only once per
+// database and then fail with a constraint violation on every later run.
+const evt = { type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: intent.data.providerOrderId }, payment: { cf_payment_id: `cf_${RUN}`, payment_amount: 7000, payment_status: 'SUCCESS', payment_group: 'upi' } } };
 const raw = JSON.stringify(evt);
 const ts = Date.now().toString();
 const sig = createHmac('sha256', SECRET).update(ts + raw).digest('base64');

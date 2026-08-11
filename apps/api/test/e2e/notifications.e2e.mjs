@@ -13,7 +13,18 @@ const buyer = (await j('POST', '/auth/register', { body: { email: `notif_${RUN}@
 
 const cats = (await j('GET', '/categories')).data;
 const catId = cats.find((c) => c.slug === 'electronics').children.find((c) => c.slug === 'mobile-phones').id;
+// The risk engine holds listings when the seller's recent listing velocity is high,
+// which repeated runs against the shared demo seller will trigger. Approve so this
+// suite tests its own subject rather than the risk engine.
+async function ensureActive(listing, adminToken) {
+  if (listing?.status === 'PENDING_REVIEW') {
+    await j('POST', `/admin/moderation/LISTING/${listing.id}/action`, { token: adminToken, body: { decision: 'APPROVE' } });
+  }
+  return listing;
+}
+
 const listing = (await j('POST', '/listings', { token: seller, body: { categoryId: catId, title: `Notif Phone ${RUN}`, description: 'notification test listing', priceMinor: 300000, attributes: { brand: 'B', model: 'M', storage: '128GB' }, publish: true } })).data;
+await ensureActive(listing, seller);
 
 // Buyer messages seller with an offer → seller should get an offer.received notification.
 const thread = (await j('POST', '/threads', { token: buyer, body: { listingId: listing.id } })).data;

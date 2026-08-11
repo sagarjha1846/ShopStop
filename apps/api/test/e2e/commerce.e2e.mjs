@@ -18,10 +18,21 @@ const buyer = (await j('POST', '/auth/register', { body: { email: buyerEmail, pa
 
 const cats = (await j('GET', '/categories')).data;
 const catId = cats.find((c) => c.slug === 'electronics').children.find((c) => c.slug === 'mobile-phones').id;
-const listing = (await j('POST', '/listings', { token: seller, body: {
+// The risk engine holds a listing when the seller's recent listing velocity is high,
+// which repeated runs against the shared demo seller trigger. Clear the hold so this
+// suite exercises commerce rather than the risk engine (risk gating is trust.e2e's job),
+// then still assert the listing really is ACTIVE before buying against it.
+async function ensureActive(listing) {
+  if (listing?.status !== 'PENDING_REVIEW') return listing;
+  await j('POST', `/admin/moderation/LISTING/${listing.id}/action`, { token: seller, body: { decision: 'APPROVE' } });
+  return (await j('GET', `/listings/${listing.id}`)).data;
+}
+
+const created = (await j('POST', '/listings', { token: seller, body: {
   categoryId: catId, title: `Pixel 8 Pro ${RUN}`, description: 'Mint condition, warranty till 2026, all accessories.',
   priceMinor: 6000000, condition: 'LIKE_NEW', attributes: { brand: 'Google', model: 'Pixel 8 Pro', storage: '256GB' }, publish: true,
 } })).data;
+const listing = await ensureActive(created);
 ok('listing ACTIVE', listing.status === 'ACTIVE', `status=${listing.status}`);
 
 const thread = (await j('POST', '/threads', { token: buyer, body: { listingId: listing.id } })).data;
@@ -78,10 +89,10 @@ ok('duplicate review -> 409', dupReview.status === 409);
 const reviewsForSeller = (await j('GET', `/reviews/user/${afterPay.sellerId}`));
 ok('review appears on seller', Array.isArray(reviewsForSeller.data) && reviewsForSeller.data.length >= 1);
 
-const listing2 = (await j('POST', '/listings', { token: seller, body: {
+const listing2 = await ensureActive((await j('POST', '/listings', { token: seller, body: {
   categoryId: catId, title: `Galaxy S24 ${RUN}`, description: 'Brand new sealed, multiple units available.',
   priceMinor: 4000000, condition: 'NEW', quantity: 5, attributes: { brand: 'Samsung', model: 'S24', storage: '256GB' }, publish: true,
-} })).data;
+} })).data);
 const freshOrder = await j('POST', '/orders', { token: buyer, headers: { 'idempotency-key': `fresh-${RUN}` }, body: { listingId: listing2.id } });
 ok('fresh order on in-stock listing', freshOrder.status === 201);
 const earlyReview = await j('POST', '/reviews', { token: buyer, body: { orderId: freshOrder.data.id, rating: 3 } });

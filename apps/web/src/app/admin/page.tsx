@@ -28,6 +28,17 @@ interface Dispute {
   status: string;
   order?: { id: string; totalMinor: number; currency: string } | null;
 }
+interface Revenue {
+  currency: string;
+  feeBps: number;
+  gmvMinor: number;
+  feeRevenueMinor: number;
+  refundedMinor: number;
+  paidOrders: number;
+  averageOrderValueMinor: number;
+  takeRatePct: number;
+  byDay: Array<{ day: string; gmvMinor: number; feeRevenueMinor: number; orders: number }>;
+}
 
 export default function AdminPage() {
   const [ready, setReady] = useState(false);
@@ -35,6 +46,7 @@ export default function AdminPage() {
   const [fraud, setFraud] = useState<FraudEvent[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [revenue, setRevenue] = useState<Revenue | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const loadQueue = useCallback(async () => {
@@ -55,6 +67,14 @@ export default function AdminPage() {
           const me = await apiAuthed<{ role: string }>('/me/profile');
           setRole(me.role);
           if (me.role === 'ADMIN' || me.role === 'MODERATOR') await loadQueue();
+          // Revenue is the company's P&L — admins only, not moderators.
+          if (me.role === 'ADMIN') {
+            try {
+              setRevenue(await apiAuthed<Revenue>('/admin/revenue?days=30'));
+            } catch {
+              /* ignore */
+            }
+          }
         } catch {
           /* ignore */
         }
@@ -92,6 +112,70 @@ export default function AdminPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Trust &amp; Safety console</h1>
       {msg && <p className="text-sm text-accent">{msg}</p>}
+
+      {revenue && (
+        <section className="rounded-lg border bg-surface p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-semibold">Revenue · last 30 days</h2>
+            <span className="text-xs text-muted">Fee {(revenue.feeBps / 100).toFixed(2)}%</span>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Platform revenue</dt>
+              <dd className="text-xl font-bold text-success">
+                {formatMoney(revenue.feeRevenueMinor, revenue.currency)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">GMV</dt>
+              <dd className="text-xl font-bold">{formatMoney(revenue.gmvMinor, revenue.currency)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Paid orders</dt>
+              <dd className="text-xl font-bold">{revenue.paidOrders}</dd>
+              <p className="text-xs text-muted">
+                avg {formatMoney(revenue.averageOrderValueMinor, revenue.currency)}
+              </p>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Effective take rate</dt>
+              <dd className="text-xl font-bold">{revenue.takeRatePct}%</dd>
+              {revenue.refundedMinor > 0 && (
+                <p className="text-xs text-muted">
+                  −{formatMoney(revenue.refundedMinor, revenue.currency)} refunded
+                </p>
+              )}
+            </div>
+          </dl>
+
+          {revenue.byDay.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[24rem] text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                    <th className="py-1 font-medium">Day</th>
+                    <th className="py-1 text-right font-medium">GMV</th>
+                    <th className="py-1 text-right font-medium">Revenue</th>
+                    <th className="py-1 text-right font-medium">Orders</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {revenue.byDay.slice(0, 10).map((d) => (
+                    <tr key={d.day}>
+                      <td className="py-1">{d.day}</td>
+                      <td className="py-1 text-right">{formatMoney(d.gmvMinor, revenue.currency)}</td>
+                      <td className="py-1 text-right text-success">
+                        {formatMoney(d.feeRevenueMinor, revenue.currency)}
+                      </td>
+                      <td className="py-1 text-right">{d.orders}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 font-semibold">Fraud queue ({fraud.length})</h2>

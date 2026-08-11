@@ -15,7 +15,18 @@ const buyer = (await j('POST', '/auth/register', { body: { email: `coup_${RUN}@e
 // Admin lists a cheap item and creates a platform-wide 20% coupon, max 1 redemption.
 const cats = (await j('GET', '/categories')).data;
 const catId = cats.find((c) => c.slug === 'electronics').children.find((c) => c.slug === 'mobile-phones').id;
+// The risk engine holds listings when the seller's recent listing velocity is high,
+// which repeated runs against the shared demo seller will trigger. Approve so this
+// suite tests its own subject rather than the risk engine.
+async function ensureActive(listing, adminToken) {
+  if (listing?.status === 'PENDING_REVIEW') {
+    await j('POST', `/admin/moderation/LISTING/${listing.id}/action`, { token: adminToken, body: { decision: 'APPROVE' } });
+  }
+  return listing;
+}
+
 const listing = (await j('POST', '/listings', { token: admin, body: { categoryId: catId, title: `Coupon Phone ${RUN}`, description: 'coupon test listing here', priceMinor: 1000000, quantity: 5, attributes: { brand: 'B', model: 'M', storage: '128GB' }, publish: true } })).data;
+await ensureActive(listing, admin);
 const code = `SAVE20_${RUN}`.toUpperCase();
 const coupon = await j('POST', '/coupons', { token: admin, body: { code, type: 'PERCENT', value: 20, maxRedemptions: 1, platformWide: true } });
 ok('admin creates coupon', coupon.status === 201, `status=${coupon.status}`);
