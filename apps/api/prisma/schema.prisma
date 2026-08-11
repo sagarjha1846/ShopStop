@@ -80,6 +80,7 @@ model User {
   savedSearches  SavedSearch[]
   notifyPrefs    NotificationPreference[]
   boostPurchases BoostPurchase[]
+  subscriptions  Subscription[]
 
   @@index([status])
   @@map("users")
@@ -584,6 +585,46 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+enum SubscriptionPlan {
+  PRO
+}
+
+enum SubscriptionStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  CANCELLED // cancelled by the seller; runs to the end of the paid period
+  EXPIRED
+}
+
+/// A paid seller plan. Sells *capability* — higher listing allowance, included
+/// sponsored-placement credit — and deliberately not trust.
+///
+/// The BUSINESS badge stays tied to SellerVerification (evidence submitted and
+/// reviewed) and is never granted by paying. A marketplace whose whole thesis is
+/// trust cannot sell the badge that signals it; that would make the signal
+/// meaningless and the thesis a lie.
+model Subscription {
+  id                String             @id @default(cuid())
+  userId            String             @map("user_id")
+  plan              SubscriptionPlan   @default(PRO)
+  status            SubscriptionStatus @default(PENDING_PAYMENT)
+  priceMinor        Int                @map("price_minor")
+  currency          String             @default("INR")
+  provider          PaymentProvider    @default(RAZORPAY)
+  providerOrderId   String?            @unique @map("provider_order_id")
+  providerPaymentId String?            @unique @map("provider_payment_id")
+  currentPeriodStart DateTime?         @map("current_period_start")
+  currentPeriodEnd   DateTime?         @map("current_period_end")
+  cancelledAt        DateTime?         @map("cancelled_at")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("subscriptions")
 }
 
 enum BoostStatus {

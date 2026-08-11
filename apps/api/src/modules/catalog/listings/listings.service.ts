@@ -5,6 +5,7 @@ import { AppError } from '../../../common/errors/app-error';
 import { CategoriesService } from '../categories/categories.service';
 import { validateAttributes } from '../attribute-validator';
 import { RiskService } from '../../trust/risk.service';
+import { SubscriptionsService } from '../../payments/subscriptions.service';
 import { MediaScanProducer } from '../../../jobs/media-scan.producer';
 import { assertSellerTransition, isPubliclyVisible, type SellerListingAction } from './listing.state';
 import type { CreateListingDto, UpdateListingDto } from './dto/listing.dto';
@@ -24,6 +25,7 @@ export class ListingsService {
     private readonly categories: CategoriesService,
     private readonly risk: RiskService,
     private readonly mediaScan: MediaScanProducer,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   async create(sellerId: string, dto: CreateListingDto): Promise<Listing> {
@@ -74,6 +76,9 @@ export class ListingsService {
       priceMinor: listing.priceMinor,
       sellerTrustScore: seller.trustScore?.score ?? 0,
       sellerVerified: !!seller.emailVerifiedAt || !!seller.phoneVerifiedAt,
+      // Paid plans buy a higher listing allowance — capability, not leniency:
+      // every other risk rule still applies unchanged.
+      listingVelocityAllowance: await this.subscriptions.listingVelocityAllowance(sellerId),
     });
 
     const status = verdict.band === 'low' ? target : ListingStatus.PENDING_REVIEW;

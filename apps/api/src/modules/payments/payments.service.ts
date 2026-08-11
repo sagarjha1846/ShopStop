@@ -12,6 +12,7 @@ import { OrdersService } from '../orders/orders.service';
 import { RazorpayProvider } from './provider/razorpay.provider';
 import { CashfreeProvider } from './provider/cashfree.provider';
 import { BoostsService } from './boosts.service';
+import { SubscriptionsService } from './subscriptions.service';
 import type { IPaymentProvider, WebhookHeaders } from './provider/payment-provider';
 
 export interface PaymentIntent {
@@ -31,6 +32,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
     private readonly boosts: BoostsService,
+    private readonly subscriptions: SubscriptionsService,
     razorpay: RazorpayProvider,
     cashfree: CashfreeProvider,
   ) {
@@ -94,6 +96,11 @@ export class PaymentsService {
     return this.boosts.purchase(sellerId, listingId, days, this.providerOrThrow(providerKey));
   }
 
+  /** Buy a Pro seller plan. Activates on capture, like every other purchase here. */
+  async purchaseSubscription(userId: string, providerKey: ProviderEnum = ProviderEnum.RAZORPAY) {
+    return this.subscriptions.subscribe(userId, this.providerOrThrow(providerKey));
+  }
+
   /**
    * Gateway webhook entry point. Verifies signature, is idempotent (a captured
    * payment reprocessed is a no-op), records a ledger Transaction, and advances the
@@ -127,6 +134,7 @@ export class PaymentsService {
       // Not an order payment — it may be a boost purchase, which carries its own
       // provider ids so the order money path stays untouched.
       if (await this.boosts.activateFromWebhook(providerOrderId, providerPaymentId, amountMinor)) return;
+      if (await this.subscriptions.activateFromWebhook(providerOrderId, providerPaymentId, amountMinor)) return;
       this.logger.warn(`Capture webhook for unknown providerOrderId ${providerOrderId}`);
       return;
     }
@@ -204,7 +212,8 @@ export class PaymentsService {
       }
       return;
     }
-    await this.boosts.failFromWebhook(providerOrderId);
+    if (await this.boosts.failFromWebhook(providerOrderId)) return;
+    await this.subscriptions.failFromWebhook(providerOrderId);
   }
 
   private providerOrThrow(key: ProviderEnum): IPaymentProvider {

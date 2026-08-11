@@ -35,6 +35,7 @@ export interface RevenueSummary {
   /** Revenue split by stream, so ad income isn't confused with commission. */
   commissionRevenueMinor: number;
   boostRevenueMinor: number;
+  subscriptionRevenueMinor: number;
   refundedMinor: number;
   paidOrders: number;
   averageOrderValueMinor: number;
@@ -173,6 +174,9 @@ export class RevenueService {
     const feeRevenueMinor = fee._sum.amountMinor ?? 0;
     const paidOrders = charge._count;
     const boostRevenueMinor = Number(byStream.find((r) => r.basis === 'boost')?.total ?? 0);
+    const subscriptionRevenueMinor = Number(byStream.find((r) => r.basis === 'subscription')?.total ?? 0);
+    // Commission is what's left once the non-merchandise streams are removed.
+    const commissionRevenueMinor = feeRevenueMinor - boostRevenueMinor - subscriptionRevenueMinor;
 
     const cardBps = this.config.get('MDR_CARD_BPS');
     const byMethod: MethodBreakdown[] = methodRows.map((r) => {
@@ -198,16 +202,16 @@ export class RevenueService {
       feeBps: this.config.get('PLATFORM_FEE_BPS'),
       gmvMinor,
       feeRevenueMinor,
-      commissionRevenueMinor: feeRevenueMinor - boostRevenueMinor,
+      commissionRevenueMinor,
       boostRevenueMinor,
+      subscriptionRevenueMinor,
       refundedMinor: refund._sum.amountMinor ?? 0,
       paidOrders,
       averageOrderValueMinor: paidOrders > 0 ? Math.round(gmvMinor / paidOrders) : 0,
-      // Commission over GMV. Boost revenue is excluded deliberately: ad spend is not
-      // a cut of merchandise, and folding it in would report a take rate above the
-      // configured rate and make the number impossible to sanity-check.
-      takeRatePct:
-        gmvMinor > 0 ? Number((((feeRevenueMinor - boostRevenueMinor) / gmvMinor) * 100).toFixed(2)) : 0,
+      // Commission over GMV. Boost and subscription revenue are excluded on purpose:
+      // neither is a cut of merchandise, and folding them in would report a take rate
+      // above the configured rate and make the number impossible to sanity-check.
+      takeRatePct: gmvMinor > 0 ? Number(((commissionRevenueMinor / gmvMinor) * 100).toFixed(2)) : 0,
       byDay: byDay.map((r) => ({
         day: r.day.toISOString().slice(0, 10),
         gmvMinor: Number(r.gmv),

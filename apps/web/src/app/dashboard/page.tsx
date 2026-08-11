@@ -22,6 +22,12 @@ interface Listing {
   currency: string;
   boostedUntil?: string | null;
 }
+interface Plan {
+  plan: string;
+  status: string | null;
+  currentPeriodEnd: string | null;
+  listingsPerHour: number;
+}
 interface BoostPricing {
   currency: string;
   pricePerDayMinor: number;
@@ -73,6 +79,20 @@ export default function DashboardPage() {
   const [pricing, setPricing] = useState<BoostPricing | null>(null);
   const [boosting, setBoosting] = useState<string | null>(null);
   const [boostMsg, setBoostMsg] = useState<string | null>(null);
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [planMsg, setPlanMsg] = useState<string | null>(null);
+
+  async function upgrade() {
+    setPlanMsg(null);
+    try {
+      const q = await apiAuthed<{ amountMinor: number; currency: string }>('/subscriptions', { method: 'POST' });
+      setPlanMsg(
+        `Pro plan started at ${formatMoney(q.amountMinor, q.currency)}/month — complete payment at checkout to activate.`,
+      );
+    } catch (e) {
+      setPlanMsg(e instanceof Error ? e.message : 'Could not start the upgrade');
+    }
+  }
 
   /** Start a boost purchase. Placement only opens once the gateway confirms payment. */
   async function boost(listingId: string) {
@@ -103,18 +123,20 @@ export default function DashboardPage() {
         try {
           const meData = await apiAuthed<Me>('/me/profile');
           setMe(meData);
-          const [b, s, l, e, p] = await Promise.all([
+          const [b, s, l, e, p, pl] = await Promise.all([
             apiAuthed<Order[]>('/orders?role=buyer'),
             apiAuthed<Order[]>('/orders?role=seller'),
             apiAuthed<{ items: Listing[] }>(`/listings?sellerId=${meData.id}`),
             apiAuthed<Earnings>('/me/earnings'),
             apiAuthed<BoostPricing>('/boosts/pricing'),
+            apiAuthed<Plan>('/me/subscription'),
           ]);
           setBuying(b);
           setSelling(s);
           setListings(l.items);
           setEarnings(e);
           setPricing(p);
+          setPlan(pl);
         } catch {
           /* ignore; show empty */
         }
@@ -185,6 +207,27 @@ export default function DashboardPage() {
           </dl>
         </div>
       )}
+
+      {plan && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-surface p-4">
+          <div>
+            <h2 className="font-semibold">
+              {plan.plan === 'PRO' ? 'ShopStop Pro' : 'Free plan'}
+              {plan.status === 'CANCELLED' && <span className="ml-2 text-xs text-muted">(ends soon)</span>}
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              List up to {plan.listingsPerHour} items an hour.
+              {plan.plan === 'PRO'
+                ? plan.currentPeriodEnd
+                  ? ` Renews ${new Date(plan.currentPeriodEnd).toLocaleDateString('en-IN')}.`
+                  : ''
+                : ' Upgrade for a higher limit and monthly promotion credit.'}
+            </p>
+          </div>
+          {plan.plan !== 'PRO' && <Button onClick={upgrade}>Upgrade to Pro</Button>}
+        </div>
+      )}
+      {planMsg && <p className="text-sm text-accent">{planMsg}</p>}
 
       <div className="flex gap-2 border-b">
         {(['buying', 'selling', 'listings'] as const).map((t) => (

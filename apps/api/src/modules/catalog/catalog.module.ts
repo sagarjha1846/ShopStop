@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TrustModule } from '../trust/trust.module';
+import { PaymentsModule } from '../payments/payments.module';
 import { CategoriesService } from './categories/categories.service';
 import { CategoriesController } from './categories/categories.controller';
 import { ListingsService } from './listings/listings.service';
@@ -13,7 +14,7 @@ import { SavedSearchesService } from './saved-searches/saved-searches.service';
 import { SavedSearchesController } from './saved-searches/saved-searches.controller';
 
 @Module({
-  imports: [TrustModule],
+  imports: [TrustModule, PaymentsModule],
   controllers: [
     CategoriesController,
     ListingsController,

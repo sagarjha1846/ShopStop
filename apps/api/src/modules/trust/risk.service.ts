@@ -23,6 +23,9 @@ export interface ListingRiskInput {
   priceMinor: number;
   sellerTrustScore: number;
   sellerVerified: boolean; // email or phone verified
+  /** Listings/hour this seller may post before velocity counts as a signal.
+   *  Paid plans raise it (see SubscriptionsService); defaults to the free tier. */
+  listingVelocityAllowance?: number;
 }
 
 /**
@@ -83,11 +86,12 @@ export class RiskService {
     const recentCount = await this.prisma.listing.count({
       where: { sellerId: input.sellerId, createdAt: { gte: new Date(Date.now() - 3_600_000) } },
     });
-    if (recentCount >= 10) {
+    const velocityAllowance = input.listingVelocityAllowance ?? 10;
+    if (recentCount >= velocityAllowance) {
       signals.push({
         signal: FraudSignal.SPAM_LISTING,
         weight: 30,
-        detail: `${recentCount} listings created in the last hour`,
+        detail: `${recentCount} listings created in the last hour (allowance ${velocityAllowance})`,
       });
     }
 

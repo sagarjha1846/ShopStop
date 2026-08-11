@@ -55,6 +55,8 @@ export const envSchema = z.object({
   // Boost price per day, in minor units (₹49.00/day). Sponsored placement is
   // sold, not given away.
   BOOST_PRICE_PER_DAY_MINOR: z.coerce.number().int().min(0).default(4900),
+  // Pro seller plan, minor units per 30-day period (₹799.00).
+  SUBSCRIPTION_PRO_PRICE_MINOR: z.coerce.number().int().min(0).default(79900),
   // Card merchant-discount rate in basis points, used to estimate what the
   // gateway takes so net margin can be reported. This is a planning default —
   // replace it with the rate actually contracted with the gateway. UPI is
