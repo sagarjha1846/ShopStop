@@ -45,14 +45,20 @@ Every push builds the API and web images and publishes them to GitHub Container
 Registry ([`.github/workflows/release.yml`](.github/workflows/release.yml)) — no
 registry secrets needed, it uses the workflow's own token.
 
-**From the published images** (no source tree required):
+**From the published images** (no source tree required — they are public, so no
+registry login):
 
 ```bash
-export IMAGE_OWNER=sagarjha1846      # lowercase
-export IMAGE_TAG=latest              # or a branch, v-tag, or sha-<commit>
-cp .env.example .env.deploy          # then fill in real secrets
+export IMAGE_OWNER=sagarjha1846
+export IMAGE_TAG=claude-project-continuation-np7izb   # `latest` appears once this merges to main
+cp .env.example .env.deploy                           # then fill in real secrets
 docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d
 ```
+
+Published images (branch tag + `sha-<commit>`, and `latest` on the default branch):
+
+- `ghcr.io/sagarjha1846/shopstop/api`
+- `ghcr.io/sagarjha1846/shopstop/web`
 
 You supply two things: a **Postgres** instance (`DATABASE_URL` — the API runs its
 migrations on boot) and a **domain** in [`ops/Caddyfile`](ops/) for auto-HTTPS.

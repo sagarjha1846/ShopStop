@@ -112,6 +112,11 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
       Caddy edge (auto-HTTPS + security headers), runtime migrate-on-boot, .dockerignore
 - [x] SessionStart hook (auto-provision Postgres/Redis/.env/deps/migrate/seed)
+- [x] Images published to GHCR on every push (release.yml, built-in token — no secrets to set),
+      plus docker-compose.deploy.yml that pulls rather than builds. Verified: both images
+      anonymously pullable from ghcr.io. Fixed two real blockers found by running it — the API
+      Dockerfile's `pnpm deploy` invocation was broken under pnpm 10 (the image had never built),
+      and Trivy was pinned to a nonexistent action version, which failed the job at setup.
 
 ---
 ### Session log
