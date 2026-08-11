@@ -79,6 +79,7 @@ model User {
   consents       Consent[]
   savedSearches  SavedSearch[]
   notifyPrefs    NotificationPreference[]
+  boostPurchases BoostPurchase[]
 
   @@index([status])
   @@map("users")
@@ -236,6 +237,8 @@ model Listing {
   threads   Thread[]
 
   @@index([status, publishedAt])
+  boostPurchases BoostPurchase[]
+
   @@index([categoryId, status])
   @@index([sellerId, status])
   @@map("listings")
@@ -581,6 +584,42 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+enum BoostStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  FAILED
+}
+
+/// A purchase of sponsored placement. Sponsored placement is a product, so it is
+/// sold rather than granted: the boost window only opens once the gateway confirms
+/// payment.
+///
+/// This carries its own provider fields instead of reusing Payment (which is 1:1
+/// with an order). Keeping the order money path untouched is deliberate — it is
+/// the most safety-critical code in the system.
+model BoostPurchase {
+  id                String          @id @default(cuid())
+  listingId         String          @map("listing_id")
+  sellerId          String          @map("seller_id")
+  days              Int
+  amountMinor       Int             @map("amount_minor")
+  currency          String          @default("INR")
+  status            BoostStatus     @default(PENDING_PAYMENT)
+  provider          PaymentProvider @default(RAZORPAY)
+  providerOrderId   String?         @unique @map("provider_order_id")
+  providerPaymentId String?         @unique @map("provider_payment_id")
+  startsAt          DateTime?       @map("starts_at")
+  endsAt            DateTime?       @map("ends_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  seller  User    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId, status])
+  @@map("boost_purchases")
 }
 
 /// Per-user, per-category delivery preferences (the preference center).

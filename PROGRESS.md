@@ -90,10 +90,15 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Seller earnings API + dashboard panel (gross / platform fee / net, settled vs in-flight)
 - [x] Admin revenue API + console panel (GMV, fee revenue, take rate, AOV, daily series),
       ADMIN-only (moderators excluded)
+- [x] Paid sponsored placement: boosts were free + unlimited (lost revenue, and a boost
+      everyone can take signals nothing). Now priced (BOOST_PRICE_PER_DAY_MINOR), sold via
+      the existing provider port, and activated only on capture; stacks onto an unexpired
+      window. Booked as a separate revenue stream — deliberately not counted as GMV, since
+      ad spend is not merchandise — verified 20/20
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 9 black-box E2E suites (97 API checks); CI runs unit +
-      commerce/trust/notification-preferences/revenue E2E
+- [x] Test suites: 41 unit + 10 black-box E2E suites (117 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue/boosts E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
@@ -145,3 +150,11 @@ Design package (docs/) is complete; this tracks **implementation**.
   reruns: suites tripping the listing-velocity risk rule, and cashfree.e2e hardcoding a
   cf_payment_id that lands in a unique column. Verified: 20/20 revenue E2E, all 9 suites
   green (97 checks), 41 unit tests, earnings + revenue panels driven in Chromium.
+- S10: Paid boosts — the second revenue line. Sponsored placement was granted for free and
+  without limit, so it earned nothing and meant nothing. BoostPurchase carries its own
+  provider ids rather than reusing Payment (1:1 with an order), which keeps the order money
+  path — the most safety-critical code here — completely untouched. Boost revenue is booked
+  as FEE with meta.basis='boost' and reported as its own stream; it is deliberately excluded
+  from GMV and from the take-rate denominator so those numbers stay sanity-checkable.
+  Verified: 20/20 boosts E2E (including 4 concurrent deliveries booking once and window
+  stacking), all 10 suites green (117 checks), Promote flow driven in Chromium.

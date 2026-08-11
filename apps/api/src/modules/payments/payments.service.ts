@@ -11,6 +11,7 @@ import { AppError } from '../../common/errors/app-error';
 import { OrdersService } from '../orders/orders.service';
 import { RazorpayProvider } from './provider/razorpay.provider';
 import { CashfreeProvider } from './provider/cashfree.provider';
+import { BoostsService } from './boosts.service';
 import type { IPaymentProvider, WebhookHeaders } from './provider/payment-provider';
 
 export interface PaymentIntent {
@@ -29,6 +30,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
+    private readonly boosts: BoostsService,
     razorpay: RazorpayProvider,
     cashfree: CashfreeProvider,
   ) {
@@ -80,6 +82,19 @@ export class PaymentsService {
   }
 
   /**
+   * Buy sponsored placement for a listing. Returns the gateway intent; the boost
+   * window opens only when the capture webhook arrives.
+   */
+  async purchaseBoost(
+    sellerId: string,
+    listingId: string,
+    days: number,
+    providerKey: ProviderEnum = ProviderEnum.RAZORPAY,
+  ) {
+    return this.boosts.purchase(sellerId, listingId, days, this.providerOrThrow(providerKey));
+  }
+
+  /**
    * Gateway webhook entry point. Verifies signature, is idempotent (a captured
    * payment reprocessed is a no-op), records a ledger Transaction, and advances the
    * order to ACCEPTED. Heavy follow-on work (receipts, payouts) is enqueued in Phase 4+.
@@ -109,6 +124,9 @@ export class PaymentsService {
     if (!providerOrderId) throw AppError.validation('Webhook missing provider order id');
     const payment = await this.prisma.payment.findFirst({ where: { providerOrderId } });
     if (!payment) {
+      // Not an order payment — it may be a boost purchase, which carries its own
+      // provider ids so the order money path stays untouched.
+      if (await this.boosts.activateFromWebhook(providerOrderId, providerPaymentId, amountMinor)) return;
       this.logger.warn(`Capture webhook for unknown providerOrderId ${providerOrderId}`);
       return;
     }
@@ -180,9 +198,13 @@ export class PaymentsService {
   private async onFailed(providerOrderId?: string): Promise<void> {
     if (!providerOrderId) return;
     const payment = await this.prisma.payment.findFirst({ where: { providerOrderId } });
-    if (payment && payment.status !== PaymentStatus.CAPTURED) {
-      await this.prisma.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.FAILED } });
+    if (payment) {
+      if (payment.status !== PaymentStatus.CAPTURED) {
+        await this.prisma.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.FAILED } });
+      }
+      return;
     }
+    await this.boosts.failFromWebhook(providerOrderId);
   }
 
   private providerOrThrow(key: ProviderEnum): IPaymentProvider {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { apiAuthed, refresh, getAccessToken } from '@/lib/auth-client';
 import { formatMoney } from '@/lib/format';
-import { Badge } from '@/components/ui';
+import { Badge, Button } from '@/components/ui';
 
 interface Order {
   id: string;
@@ -20,6 +20,12 @@ interface Listing {
   status: string;
   priceMinor: number;
   currency: string;
+  boostedUntil?: string | null;
+}
+interface BoostPricing {
+  currency: string;
+  pricePerDayMinor: number;
+  maxDays: number;
 }
 interface Me {
   id: string;
@@ -64,6 +70,30 @@ export default function DashboardPage() {
   const [selling, setSelling] = useState<Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
+  const [pricing, setPricing] = useState<BoostPricing | null>(null);
+  const [boosting, setBoosting] = useState<string | null>(null);
+  const [boostMsg, setBoostMsg] = useState<string | null>(null);
+
+  /** Start a boost purchase. Placement only opens once the gateway confirms payment. */
+  async function boost(listingId: string) {
+    setBoosting(listingId);
+    setBoostMsg(null);
+    try {
+      const quote = await apiAuthed<{ amountMinor: number; currency: string }>(
+        `/listings/${listingId}/boost`,
+        { method: 'POST', body: { days: 7 } },
+      );
+      // Mirrors the order pay flow: a real client opens gateway checkout with the
+      // returned token, and the boost activates on the capture webhook.
+      setBoostMsg(
+        `Boost of ${formatMoney(quote.amountMinor, quote.currency)} started — complete payment at checkout to go live.`,
+      );
+    } catch (e) {
+      setBoostMsg(e instanceof Error ? e.message : 'Could not start the boost');
+    } finally {
+      setBoosting(null);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -73,16 +103,18 @@ export default function DashboardPage() {
         try {
           const meData = await apiAuthed<Me>('/me/profile');
           setMe(meData);
-          const [b, s, l, e] = await Promise.all([
+          const [b, s, l, e, p] = await Promise.all([
             apiAuthed<Order[]>('/orders?role=buyer'),
             apiAuthed<Order[]>('/orders?role=seller'),
             apiAuthed<{ items: Listing[] }>(`/listings?sellerId=${meData.id}`),
             apiAuthed<Earnings>('/me/earnings'),
+            apiAuthed<BoostPricing>('/boosts/pricing'),
           ]);
           setBuying(b);
           setSelling(s);
           setListings(l.items);
           setEarnings(e);
+          setPricing(p);
         } catch {
           /* ignore; show empty */
         }
@@ -202,18 +234,36 @@ export default function DashboardPage() {
       ) : (
         <ul className="space-y-2">
           {listings.map((l) => (
-            <li key={l.id} className="flex items-center justify-between rounded-lg border bg-surface p-3">
+            <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-surface p-3">
               <Link href={`/l/${l.id}`} className="font-medium hover:underline">
                 {l.title}
               </Link>
               <div className="flex items-center gap-3">
                 <span className="text-sm">{formatMoney(l.priceMinor, l.currency)}</span>
                 <Badge tone={STATUS_TONE[l.status] ?? 'muted'}>{l.status}</Badge>
+                {l.boostedUntil && new Date(l.boostedUntil) > new Date() ? (
+                  <Badge tone="brand">Promoted</Badge>
+                ) : (
+                  l.status === 'ACTIVE' &&
+                  pricing && (
+                    <Button
+                      variant="outline"
+                      onClick={() => boost(l.id)}
+                      disabled={boosting === l.id}
+                      className="text-xs"
+                    >
+                      {boosting === l.id
+                        ? 'Starting…'
+                        : `Promote 7d · ${formatMoney(pricing.pricePerDayMinor * 7, pricing.currency)}`}
+                    </Button>
+                  )
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
+      {boostMsg && <p className="text-sm text-accent">{boostMsg}</p>}
     </div>
   );
 }

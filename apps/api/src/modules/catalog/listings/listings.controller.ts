@@ -74,11 +74,8 @@ export class ListingsController {
     return this.listings.duplicate(user.id, id);
   }
 
-  /** Feature the listing at the top of browse for N days (owner only). */
-  @Post(':id/boost')
-  boost(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: { days?: number }) {
-    return this.listings.boost(user.id, id, Number(body?.days) || 7);
-  }
+  // Boosting lives in the payments module (POST /listings/:id/boost) — sponsored
+  // placement is a paid product, so it is sold rather than granted here.
 
   @Delete(':id')
   @HttpCode(204)

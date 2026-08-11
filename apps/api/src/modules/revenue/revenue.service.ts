@@ -20,6 +20,9 @@ export interface RevenueSummary {
   gmvMinor: number;
   /** What the platform kept — the top line that matters. */
   feeRevenueMinor: number;
+  /** Revenue split by stream, so ad income isn't confused with commission. */
+  commissionRevenueMinor: number;
+  boostRevenueMinor: number;
   refundedMinor: number;
   paidOrders: number;
   averageOrderValueMinor: number;
@@ -78,7 +81,7 @@ export class RevenueService {
   async summary(days = 30): Promise<RevenueSummary> {
     const since = new Date(Date.now() - Math.min(Math.max(days, 1), 365) * 86_400_000);
 
-    const [charge, fee, refund, byDay] = await Promise.all([
+    const [charge, fee, refund, byDay, byStream] = await Promise.all([
       this.prisma.transaction.aggregate({
         where: { type: TransactionType.CHARGE, createdAt: { gte: since } },
         _sum: { amountMinor: true },
@@ -102,21 +105,37 @@ export class RevenueService {
         GROUP BY 1
         ORDER BY 1 DESC
       `,
+      // Revenue by stream. `meta.basis` is written at booking time ('boost' for
+      // sponsored placement, 'order.commission' for the take rate); rows booked
+      // before that tag existed fall through to commission.
+      this.prisma.$queryRaw<Array<{ basis: string | null; total: bigint }>>`
+        SELECT meta->>'basis' AS basis, COALESCE(SUM(amount_minor), 0) AS total
+        FROM transactions
+        WHERE type = 'FEE' AND created_at >= ${since}
+        GROUP BY 1
+      `,
     ]);
 
     const gmvMinor = charge._sum.amountMinor ?? 0;
     const feeRevenueMinor = fee._sum.amountMinor ?? 0;
     const paidOrders = charge._count;
+    const boostRevenueMinor = Number(byStream.find((r) => r.basis === 'boost')?.total ?? 0);
 
     return {
       currency: 'INR',
       feeBps: this.config.get('PLATFORM_FEE_BPS'),
       gmvMinor,
       feeRevenueMinor,
+      commissionRevenueMinor: feeRevenueMinor - boostRevenueMinor,
+      boostRevenueMinor,
       refundedMinor: refund._sum.amountMinor ?? 0,
       paidOrders,
       averageOrderValueMinor: paidOrders > 0 ? Math.round(gmvMinor / paidOrders) : 0,
-      takeRatePct: gmvMinor > 0 ? Number(((feeRevenueMinor / gmvMinor) * 100).toFixed(2)) : 0,
+      // Commission over GMV. Boost revenue is excluded deliberately: ad spend is not
+      // a cut of merchandise, and folding it in would report a take rate above the
+      // configured rate and make the number impossible to sanity-check.
+      takeRatePct:
+        gmvMinor > 0 ? Number((((feeRevenueMinor - boostRevenueMinor) / gmvMinor) * 100).toFixed(2)) : 0,
       byDay: byDay.map((r) => ({
         day: r.day.toISOString().slice(0, 10),
         gmvMinor: Number(r.gmv),

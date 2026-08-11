@@ -15,6 +15,7 @@ node test/e2e/commerce.e2e.mjs   # offers → order → payment webhook → fulf
 node test/e2e/trust.e2e.mjs      # risk hold → moderation queue (RBAC) → reject/approve → profile
 node test/e2e/notification-preferences.e2e.mjs  # preference centre gates delivery
 node test/e2e/revenue.e2e.mjs    # commission booked to the ledger → earnings + admin revenue
+node test/e2e/boosts.e2e.mjs     # sponsored placement is sold: pay → activate → book revenue
 # realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
 node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
@@ -36,6 +37,11 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   ledger on capture, replayed *and* concurrent duplicate webhooks book exactly
   once, seller earnings (gross/fee/net, settled vs in-flight), admin revenue
   summary (GMV, fee revenue, take rate, daily series), admin-only authorization.
+- **boosts**: published pricing, a purchase does not grant placement until the
+  capture webhook lands, activation opens the paid window, revenue booked as a
+  separate stream (and deliberately not counted as GMV), replayed *and* concurrent
+  deliveries book once, a second boost stacks onto the remaining window, ABAC +
+  auth + day-cap guards.
 
 CI runs these against an ephemeral stack (see `.github/workflows/ci.yml`, extended
 in Phase 7). For a typed integration suite, these can be ported to Jest + supertest.

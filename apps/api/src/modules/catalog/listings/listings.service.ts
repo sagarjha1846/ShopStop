@@ -284,14 +284,9 @@ export class ListingsService {
     return { items, nextCursor };
   }
 
-  /** Feature a listing to the top of browse for N days (owner only). In prod this
-   *  is gated behind a boost payment (Phase 2); here it sets the window directly. */
-  async boost(sellerId: string, listingId: string, days: number): Promise<Listing> {
-    await this.ownedOrThrow(sellerId, listingId);
-    const until = new Date(Date.now() + Math.min(Math.max(days, 1), 30) * 86_400_000);
-    await this.prisma.listing.update({ where: { id: listingId }, data: { boostedUntil: until } });
-    return this.withMedia(listingId);
-  }
+  // Boosting a listing is a purchase, not a catalog mutation: see BoostsService in
+  // the payments module. It sets boostedUntil only once the gateway confirms payment,
+  // so sponsored placement can't be granted for free from here.
 
   // ---- helpers ----
 
