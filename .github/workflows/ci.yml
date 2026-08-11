@@ -113,6 +113,7 @@ jobs:
         run: |
           node test/e2e/commerce.e2e.mjs
           node test/e2e/trust.e2e.mjs
+          node test/e2e/notification-preferences.e2e.mjs
 
   security:
     runs-on: ubuntu-latest

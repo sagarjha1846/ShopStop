@@ -146,7 +146,7 @@ export class UsersService {
    * the personal data we hold for the user as a JSON bundle.
    */
   async exportData(userId: string): Promise<unknown> {
-    const [user, listings, ordersBuyer, ordersSeller, reviews, addresses, wishlist, notifications, consents, messages] =
+    const [user, listings, ordersBuyer, ordersSeller, reviews, addresses, wishlist, notifications, consents, messages, notificationPreferences] =
       await Promise.all([
         this.prisma.user.findUnique({
           where: { id: userId },
@@ -161,6 +161,10 @@ export class UsersService {
         this.prisma.notification.findMany({ where: { userId }, select: { type: true, title: true, createdAt: true } }),
         this.prisma.consent.findMany({ where: { userId } }),
         this.prisma.message.findMany({ where: { senderId: userId }, select: { id: true, threadId: true, kind: true, body: true, createdAt: true }, take: 5000 }),
+        this.prisma.notificationPreference.findMany({
+          where: { userId },
+          select: { category: true, inApp: true, email: true, updatedAt: true },
+        }),
       ]);
     return {
       exportedAt: new Date().toISOString(),
@@ -171,6 +175,7 @@ export class UsersService {
       addresses,
       wishlist,
       notifications,
+      notificationPreferences,
       consents,
       messages,
     };

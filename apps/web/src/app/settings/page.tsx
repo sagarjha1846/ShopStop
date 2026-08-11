@@ -11,6 +11,15 @@ interface Me {
   profile?: { handle: string; displayName: string; bio: string | null; locationText: string | null } | null;
 }
 
+interface NotificationPreference {
+  category: string;
+  label: string;
+  description: string;
+  locked: boolean;
+  inApp: boolean;
+  email: boolean;
+}
+
 export default function SettingsPage() {
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
@@ -19,6 +28,8 @@ export default function SettingsPage() {
   const [bio, setBio] = useState('');
   const [locationText, setLocationText] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [prefs, setPrefs] = useState<NotificationPreference[]>([]);
+  const [prefStatus, setPrefStatus] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -34,10 +45,36 @@ export default function SettingsPage() {
         } catch {
           /* ignore */
         }
+        try {
+          setPrefs(await apiAuthed<NotificationPreference[]>('/me/notification-preferences'));
+        } catch {
+          /* ignore */
+        }
       }
       setReady(true);
     })();
   }, []);
+
+  /** Optimistic toggle: flip locally, persist, roll back if the API rejects it. */
+  async function togglePref(category: string, channel: 'inApp' | 'email', value: boolean) {
+    const previous = prefs;
+    const next = prefs.map((p) => (p.category === category ? { ...p, [channel]: value } : p));
+    setPrefs(next);
+    setPrefStatus(null);
+    const updated = next.find((p) => p.category === category)!;
+    try {
+      setPrefs(
+        await apiAuthed<NotificationPreference[]>('/me/notification-preferences', {
+          method: 'PATCH',
+          body: { preferences: [{ category, inApp: updated.inApp, email: updated.email }] },
+        }),
+      );
+      setPrefStatus('Preferences saved.');
+    } catch (err) {
+      setPrefs(previous);
+      setPrefStatus(err instanceof Error ? err.message : 'Could not save preferences');
+    }
+  }
 
   async function exportData() {
     try {
@@ -105,6 +142,46 @@ export default function SettingsPage() {
           Two-factor authentication (TOTP) is {me?.mfaEnabled ? 'enabled' : 'available'}. Manage via the
           API (`/auth/mfa/enroll`) — a guided setup UI is on the roadmap.
         </p>
+      </div>
+
+      <div className="rounded-lg border bg-surface p-4">
+        <h2 className="font-semibold">Notifications</h2>
+        <p className="mt-1 text-sm text-muted">
+          Choose how each kind of update reaches you. Account &amp; security notices are always on.
+        </p>
+
+        <div className="mt-3 divide-y">
+          <div className="hidden gap-2 pb-2 text-xs font-medium uppercase tracking-wide text-muted sm:grid sm:grid-cols-[1fr_5rem_5rem]">
+            <span>Category</span>
+            <span className="text-center">In-app</span>
+            <span className="text-center">Email</span>
+          </div>
+
+          {prefs.map((p) => (
+            <div key={p.category} className="grid gap-1 py-3 sm:grid-cols-[1fr_5rem_5rem] sm:items-center sm:gap-2">
+              <div>
+                <div className="text-sm font-medium">{p.label}</div>
+                <div className="text-xs text-muted">{p.description}</div>
+              </div>
+              {(['inApp', 'email'] as const).map((channel) => (
+                <label key={channel} className="flex items-center gap-2 text-sm sm:justify-center">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand disabled:opacity-50"
+                    checked={p[channel]}
+                    disabled={p.locked}
+                    aria-label={`${channel === 'inApp' ? 'In-app' : 'Email'} notifications for ${p.label}`}
+                    onChange={(e) => togglePref(p.category, channel, e.target.checked)}
+                  />
+                  <span className="text-muted sm:hidden">{channel === 'inApp' ? 'In-app' : 'Email'}</span>
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {prefs.length === 0 && <p className="mt-2 text-sm text-muted">Could not load preferences.</p>}
+        {prefStatus && <p className="mt-2 text-sm text-accent">{prefStatus}</p>}
       </div>
 
       <div className="rounded-lg border bg-surface p-4">

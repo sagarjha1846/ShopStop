@@ -78,6 +78,7 @@ model User {
   following      Follow[]            @relation("Follower")
   consents       Consent[]
   savedSearches  SavedSearch[]
+  notifyPrefs    NotificationPreference[]
 
   @@index([status])
   @@map("users")
@@ -580,6 +581,24 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+/// Per-user, per-category delivery preferences (the preference center).
+/// Sparse by design: a missing row means "use the category default", so adding a
+/// new category never requires a backfill. Locked categories (account/security)
+/// are enforced in code — see notification-categories.ts.
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  category  String // orders | messages | offers | trust | marketing
+  inApp     Boolean  @default(true) @map("in_app")
+  email     Boolean  @default(true)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("notification_preferences")
 }
 
 // ----------------------------------------------------------------------------

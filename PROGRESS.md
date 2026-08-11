@@ -65,6 +65,9 @@ Design package (docs/) is complete; this tracks **implementation**.
       stored with per-factor breakdown; triggered on email/phone/ID verify, reviews, delivered orders — verified 5→15
 - [x] Notifications: persist + realtime push on order/message/offer events; web bell +
       /notifications page (live unread count) — verified 4/4
+- [x] Notification preference centre: per-category in-app/email channels (defaults + locked
+      security category), gating inside notify(), queued transactional email (verified-address
+      only, HTML-escaped), /settings toggles, preferences in the DSAR export — verified 13/13
 
 ## Phase 6 — Frontend (apps/web, Next.js)  ✅ core slice verified against live API
 - [x] Next.js 15 App Router + Tailwind + design tokens (light/dark, no-FOUC) + UI primitives
@@ -78,7 +81,8 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Browser smoke (Chromium): register→cookie→sell→create→detail→theme 7/7; admin console loads live queue
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 27 unit + 2 black-box E2E suites (37 API checks); CI runs them
+- [x] Test suites: 41 unit + 9 black-box E2E suites (~82 API checks); CI runs unit +
+      commerce/trust/notification-preferences E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
@@ -104,3 +108,17 @@ Design package (docs/) is complete; this tracks **implementation**.
   by recreating from context and re-provisioning. LESSON: commit after every green typecheck.
   Verified live: commerce 24/24, trust 13/13 E2E; 27 unit tests green. E2E scripts committed
   under apps/api/test/e2e. Next: Phase 6 frontend (apps/web) + Phase 7 hardening.
+- S5–S7: Phase 6 frontend + the Phase 3/4/5 breadth listed above (realtime chat, metrics,
+  notifications, wishlist, MFA, addresses, async worker, coupons, saved searches, DSAR,
+  support, media scan, consent, Cashfree, variants, boost, trust recompute). Session-log
+  entries were not written at the time; the phase checklists above are the record.
+- S8: Notification preference centre — closed the last open MVP item in docs/03 §7. Added the
+  NotificationPreference model + migration, a category taxonomy with pure resolution rules
+  (defaults → override → locked), GET/PATCH /me/notification-preferences, and gating inside
+  notify() so muting a category actually suppresses delivery. Wired the email channel through
+  the existing notify queue. Two real fixes found by doing this: (1) `prisma migrate dev`
+  wanted to drop the hand-written FTS indexes + the search_vector generated expression — the
+  migration was trimmed to the new table only; (2) MailService.send swallowed SMTP errors, so
+  the worker logged every failed send as complete and BullMQ's configured 3-attempt backoff
+  never fired — now it propagates. Verified live: 13/13 new E2E, 41 unit tests, all 9 E2E
+  suites green (no regressions), preference centre driven in Chromium, both apps build clean.

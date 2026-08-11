@@ -1,8 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Notification, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { AppError } from '../../common/errors/app-error';
+import { NotificationPreferencesService } from './notification-preferences.service';
+import { NotifyProducer } from '../../jobs/notify.producer';
+import { MailService } from '../../mail/mail.service';
 
 export interface NotifyInput {
   userId: string;
@@ -14,24 +17,69 @@ export interface NotifyInput {
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly prefs: NotificationPreferencesService,
+    private readonly notifyQueue: NotifyProducer,
+    private readonly mail: MailService,
   ) {}
 
-  /** Persist a notification and push it live to the user (best-effort realtime). */
-  async notify(input: NotifyInput): Promise<Notification> {
-    const n = await this.prisma.notification.create({
-      data: {
-        userId: input.userId,
-        type: input.type,
-        title: input.title,
-        body: input.body,
-        data: (input.data ?? {}) as Prisma.InputJsonValue,
-      },
-    });
-    this.realtime.emitNotification(input.userId, n);
-    return n;
+  /**
+   * Fan a notification out to the channels the user has left enabled.
+   *
+   * In-app: persisted + pushed live. Email: enqueued on the notify queue so the
+   * SMTP round-trip stays off the request path. Returns the stored notification,
+   * or null when the user has muted this category in-app.
+   */
+  async notify(input: NotifyInput): Promise<Notification | null> {
+    const channels = await this.prefs.channelsForType(input.userId, input.type);
+
+    let stored: Notification | null = null;
+    if (channels.inApp) {
+      stored = await this.prisma.notification.create({
+        data: {
+          userId: input.userId,
+          type: input.type,
+          title: input.title,
+          body: input.body,
+          data: (input.data ?? {}) as Prisma.InputJsonValue,
+        },
+      });
+      this.realtime.emitNotification(input.userId, stored);
+    }
+
+    if (channels.email) await this.sendEmail(input);
+
+    return stored;
+  }
+
+  /**
+   * Queue the email copy. Only verified, active addresses are mailed: anyone can
+   * type a stranger's address at registration, so emailing an unverified one
+   * turns marketplace activity into a spam vector aimed at that stranger.
+   */
+  private async sendEmail(input: NotifyInput): Promise<void> {
+    try {
+      const user = await this.prisma.user.findFirst({
+        where: { id: input.userId, deletedAt: null, emailVerifiedAt: { not: null } },
+        select: { email: true },
+      });
+      if (!user) return;
+
+      await this.notifyQueue.enqueueEmail(
+        this.mail.renderNotification(user.email, {
+          title: input.title,
+          body: input.body,
+          data: input.data,
+        }),
+      );
+    } catch (err) {
+      // Email is best-effort: a queue hiccup must not fail the caller's transaction.
+      this.logger.warn(`Could not queue notification email: ${String(err)}`);
+    }
   }
 
   async list(userId: string, unreadOnly = false): Promise<Notification[]> {
