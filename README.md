@@ -41,9 +41,30 @@ See [PROGRESS.md](PROGRESS.md) for the live build checklist.
 
 ## Deploy
 
-Containerized single-host stack (docs/13): `docker compose -f docker-compose.prod.yml up -d --build`
-builds the API + web images (multi-stage), runs Redis, and puts Caddy in front for
-auto-HTTPS + security headers. Bring managed Postgres (and Redis) as you scale.
+Every push builds the API and web images and publishes them to GitHub Container
+Registry ([`.github/workflows/release.yml`](.github/workflows/release.yml)) — no
+registry secrets needed, it uses the workflow's own token.
+
+**From the published images** (no source tree required):
+
+```bash
+export IMAGE_OWNER=sagarjha1846      # lowercase
+export IMAGE_TAG=latest              # or a branch, v-tag, or sha-<commit>
+cp .env.example .env.deploy          # then fill in real secrets
+docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d
+```
+
+You supply two things: a **Postgres** instance (`DATABASE_URL` — the API runs its
+migrations on boot) and a **domain** in [`ops/Caddyfile`](ops/) for auto-HTTPS.
+Redis and the Caddy edge come up with the stack. Per [docs/16](docs/16-cost-estimation.md)
+this runs on a ~$25/mo VPS at launch scale.
+
+**From source** instead: `docker compose -f docker-compose.prod.yml up -d --build`.
+
+> **Before taking real payments**, read the monetization analysis — the current
+> money flow captures funds into the platform's own gateway account with no
+> settlement path to sellers, which is both a growing payable and a regulatory
+> problem. Fix that first ([docs/18](docs/18-risks-and-tradeoffs.md) R4).
 
 ---
 
