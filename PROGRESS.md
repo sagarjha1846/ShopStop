@@ -94,6 +94,10 @@ Design package (docs/) is complete; this tracks **implementation**.
       negative-FEE contra entry, and refunded sales drop out of seller settled earnings. Previously
       the refund only flipped order status, so the platform kept its cut of a refunded sale and
       `refundedMinor` was structurally always zero — verified 25/25
+- [x] Commission margin by payment method: revenue now splits GMV/commission by payment method
+      and estimates gateway cost per method (UPI zero-MDR, card MDR_CARD_BPS), so "fee revenue"
+      is no longer read as profit. Measured live: card volume nets exactly zero — the 2% take
+      rate is priced at card processing cost — while UPI keeps the full commission
 - [x] Paid sponsored placement: boosts were free + unlimited (lost revenue, and a boost
       everyone can take signals nothing). Now priced (BOOST_PRICE_PER_DAY_MINOR), sold via
       the existing provider port, and activated only on capture; stacks onto an unexpired
@@ -101,7 +105,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       ad spend is not merchandise — verified 20/20
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 10 black-box E2E suites (122 API checks); CI runs unit +
+- [x] Test suites: 41 unit + 10 black-box E2E suites (131 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live

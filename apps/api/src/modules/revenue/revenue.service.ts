@@ -13,6 +13,18 @@ export interface SellerEarnings {
   lifetimeNetMinor: number;
 }
 
+export interface MethodBreakdown {
+  method: string;
+  gmvMinor: number;
+  orders: number;
+  /** Commission booked for this method, net of any refund reversals. */
+  commissionMinor: number;
+  /** What the gateway is estimated to take. An estimate, not a billed figure. */
+  estGatewayCostMinor: number;
+  /** commission − estimated gateway cost. Negative means the method loses money. */
+  estNetMinor: number;
+}
+
 export interface RevenueSummary {
   currency: string;
   feeBps: number;
@@ -28,7 +40,31 @@ export interface RevenueSummary {
   averageOrderValueMinor: number;
   takeRatePct: number;
   byDay: Array<{ day: string; gmvMinor: number; feeRevenueMinor: number; orders: number }>;
+  /**
+   * Commission economics by payment method. The commission rate is close to card
+   * MDR, so whether commission earns anything depends on how much volume settles
+   * over zero-MDR UPI. Without this split, "fee revenue" reads as profit when it
+   * may be a pass-through of the processing cost.
+   */
+  byMethod: MethodBreakdown[];
+  /** Commission minus estimated gateway cost, across all methods. */
+  estNetCommissionMinor: number;
 }
+
+/**
+ * Merchant-discount rate by payment method, in basis points.
+ *
+ * UPI is zero-rated for merchant payments in India, which is why payment mix —
+ * not the headline take rate — decides whether commission has a margin. These are
+ * planning assumptions from docs/16; replace them with contracted rates before
+ * making a pricing decision on the output.
+ */
+const MDR_BPS: Readonly<Record<string, number>> = {
+  upi: 0,
+  netbanking: 90,
+  wallet: 200,
+  emi: 300,
+};
 
 /** Orders whose money is committed but not yet captured. */
 const IN_FLIGHT: OrderStatus[] = [OrderStatus.ACCEPTED, OrderStatus.PACKED, OrderStatus.SHIPPED];
@@ -84,7 +120,7 @@ export class RevenueService {
   async summary(days = 30): Promise<RevenueSummary> {
     const since = new Date(Date.now() - Math.min(Math.max(days, 1), 365) * 86_400_000);
 
-    const [charge, fee, refund, byDay, byStream] = await Promise.all([
+    const [charge, fee, refund, byDay, byStream, methodRows] = await Promise.all([
       this.prisma.transaction.aggregate({
         where: { type: TransactionType.CHARGE, createdAt: { gte: since } },
         _sum: { amountMinor: true },
@@ -117,12 +153,45 @@ export class RevenueService {
         WHERE type = 'FEE' AND created_at >= ${since}
         GROUP BY 1
       `,
+      // Order-linked ledger rows joined to the payment that funded them. Boost FEE
+      // rows carry no orderId, so the join excludes them — correct, since ad spend
+      // has no per-order payment method. FEE reversals net out automatically.
+      this.prisma.$queryRaw<Array<{ method: string; gmv: bigint; fee: bigint; orders: bigint }>>`
+        SELECT COALESCE(p.method, 'unknown') AS method,
+               COALESCE(SUM(t.amount_minor) FILTER (WHERE t.type = 'CHARGE'), 0) AS gmv,
+               COALESCE(SUM(t.amount_minor) FILTER (WHERE t.type = 'FEE'), 0)    AS fee,
+               COUNT(*) FILTER (WHERE t.type = 'CHARGE')                          AS orders
+        FROM transactions t
+        JOIN payments p ON p.order_id = t.order_id
+        WHERE t.created_at >= ${since} AND t.order_id IS NOT NULL
+        GROUP BY 1
+        ORDER BY 2 DESC
+      `,
     ]);
 
     const gmvMinor = charge._sum.amountMinor ?? 0;
     const feeRevenueMinor = fee._sum.amountMinor ?? 0;
     const paidOrders = charge._count;
     const boostRevenueMinor = Number(byStream.find((r) => r.basis === 'boost')?.total ?? 0);
+
+    const cardBps = this.config.get('MDR_CARD_BPS');
+    const byMethod: MethodBreakdown[] = methodRows.map((r) => {
+      const gmv = Number(r.gmv);
+      const commission = Number(r.fee);
+      // Unknown methods are costed at the card rate: assuming the expensive case
+      // keeps this from flattering the margin.
+      const bps = MDR_BPS[r.method] ?? cardBps;
+      const estGatewayCostMinor = Math.round((gmv * bps) / 10_000);
+      return {
+        method: r.method,
+        gmvMinor: gmv,
+        orders: Number(r.orders),
+        commissionMinor: commission,
+        estGatewayCostMinor,
+        estNetMinor: commission - estGatewayCostMinor,
+      };
+    });
+    const estNetCommissionMinor = byMethod.reduce((acc, m) => acc + m.estNetMinor, 0);
 
     return {
       currency: 'INR',
@@ -145,6 +214,8 @@ export class RevenueService {
         feeRevenueMinor: Number(r.fee),
         orders: Number(r.orders),
       })),
+      byMethod,
+      estNetCommissionMinor,
     };
   }
 

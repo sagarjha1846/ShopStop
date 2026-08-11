@@ -38,6 +38,15 @@ interface Revenue {
   averageOrderValueMinor: number;
   takeRatePct: number;
   byDay: Array<{ day: string; gmvMinor: number; feeRevenueMinor: number; orders: number }>;
+  byMethod: Array<{
+    method: string;
+    gmvMinor: number;
+    orders: number;
+    commissionMinor: number;
+    estGatewayCostMinor: number;
+    estNetMinor: number;
+  }>;
+  estNetCommissionMinor: number;
 }
 
 export default function AdminPage() {
@@ -138,15 +147,57 @@ export default function AdminPage() {
               </p>
             </div>
             <div>
-              <dt className="text-xs uppercase tracking-wide text-muted">Effective take rate</dt>
-              <dd className="text-xl font-bold">{revenue.takeRatePct}%</dd>
-              {revenue.refundedMinor > 0 && (
-                <p className="text-xs text-muted">
-                  −{formatMoney(revenue.refundedMinor, revenue.currency)} refunded
-                </p>
-              )}
+              <dt className="text-xs uppercase tracking-wide text-muted">Commission after gateway</dt>
+              <dd
+                className={`text-xl font-bold ${revenue.estNetCommissionMinor > 0 ? 'text-success' : 'text-danger'}`}
+              >
+                {formatMoney(revenue.estNetCommissionMinor, revenue.currency)}
+              </dd>
+              <p className="text-xs text-muted">est · take rate {revenue.takeRatePct}%</p>
             </div>
           </dl>
+
+          {revenue.byMethod.length > 0 && (
+            <div className="mt-5">
+              <h3 className="text-sm font-semibold">Does the commission actually earn?</h3>
+              <p className="mt-1 text-xs text-muted">
+                Commission is priced near card processing cost, so margin depends on payment mix.
+                Gateway cost is estimated — replace the assumed rates with your contracted ones.
+              </p>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full min-w-[30rem] text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                      <th className="py-1 font-medium">Method</th>
+                      <th className="py-1 text-right font-medium">GMV</th>
+                      <th className="py-1 text-right font-medium">Commission</th>
+                      <th className="py-1 text-right font-medium">Gateway (est)</th>
+                      <th className="py-1 text-right font-medium">Net (est)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {revenue.byMethod.map((m) => (
+                      <tr key={m.method}>
+                        <td className="py-1 uppercase">{m.method}</td>
+                        <td className="py-1 text-right">{formatMoney(m.gmvMinor, revenue.currency)}</td>
+                        <td className="py-1 text-right">
+                          {formatMoney(m.commissionMinor, revenue.currency)}
+                        </td>
+                        <td className="py-1 text-right text-muted">
+                          −{formatMoney(m.estGatewayCostMinor, revenue.currency)}
+                        </td>
+                        <td
+                          className={`py-1 text-right font-medium ${m.estNetMinor > 0 ? 'text-success' : 'text-danger'}`}
+                        >
+                          {formatMoney(m.estNetMinor, revenue.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {revenue.byDay.length > 0 && (
             <div className="mt-4 overflow-x-auto">

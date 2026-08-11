@@ -55,6 +55,11 @@ export const envSchema = z.object({
   // Boost price per day, in minor units (₹49.00/day). Sponsored placement is
   // sold, not given away.
   BOOST_PRICE_PER_DAY_MINOR: z.coerce.number().int().min(0).default(4900),
+  // Card merchant-discount rate in basis points, used to estimate what the
+  // gateway takes so net margin can be reported. This is a planning default —
+  // replace it with the rate actually contracted with the gateway. UPI is
+  // treated as zero-MDR (docs/16); see revenue.service.ts for the full map.
+  MDR_CARD_BPS: z.coerce.number().int().min(0).max(10_000).default(200),
 
   OTP_TTL_SEC: z.coerce.number().int().positive().default(300),
   OTP_DEV_LOG: z

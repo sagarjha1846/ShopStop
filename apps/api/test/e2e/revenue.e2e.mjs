@@ -84,6 +84,29 @@ ok('settled fee grew by both commissions', earnings.settled.feeMinor - beforeEar
 ok('net = gross - fee', earnings.settled.netMinor === earnings.settled.grossMinor - earnings.settled.feeMinor);
 ok('earnings report the configured take rate', earnings.feeBps === FEE_BPS, `bps=${earnings.feeBps}`);
 
+// --- 6b. commission margin by payment method ----------------------------------
+// Fund one order by card. Commission is priced at ~card MDR, so this is the case
+// that decides whether the take rate earns anything — it must show ~zero net.
+const cardOrder = (await j('POST', '/orders', { token: buyer, headers: { 'idempotency-key': `rev3-${RUN}` }, body: { listingId: listing.id } })).data;
+const cardIntent = (await j('POST', '/payments/intent', { token: buyer, headers: { 'idempotency-key': `revpay3-${RUN}` }, body: { orderId: cardOrder.id } })).data;
+const cardEvt = { event: 'payment.captured', payload: { payment: { entity: { id: `cardpay_${RUN}`, order_id: cardIntent.providerOrderId, amount: PRICE, method: 'card' } } } };
+const cardRaw = JSON.stringify(cardEvt);
+const cardSig = createHmac('sha256', WEBHOOK_SECRET).update(cardRaw).digest('hex');
+await fetch(`${B}/payments/webhook/razorpay`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-razorpay-signature': cardSig }, body: cardRaw });
+
+const mixed = (await j('GET', '/admin/revenue?days=1', { token: seller })).data;
+const card = mixed.byMethod.find((m) => m.method === 'card');
+ok('card volume reported separately', !!card, `methods=${mixed.byMethod.map((m) => m.method)}`);
+ok('card gateway cost ≈ the commission charged', card.estGatewayCostMinor === card.commissionMinor, `cost=${card?.estGatewayCostMinor} commission=${card?.commissionMinor}`);
+ok('card commission nets ~zero (the F2 finding, measured)', card.estNetMinor === 0, `net=${card?.estNetMinor}`);
+const upi = mixed.byMethod.find((m) => m.method === 'upi');
+ok('revenue splits by payment method', !!upi, `methods=${mixed.byMethod.map((m) => m.method)}`);
+ok('UPI is costed at zero MDR', upi.estGatewayCostMinor === 0, `cost=${upi.estGatewayCostMinor}`);
+ok('UPI net = full commission', upi.estNetMinor === upi.commissionMinor, `net=${upi.estNetMinor} commission=${upi.commissionMinor}`);
+ok('net commission totals the per-method rows', mixed.estNetCommissionMinor === mixed.byMethod.reduce((a, m) => a + m.estNetMinor, 0));
+ok('method GMV never exceeds total GMV', mixed.byMethod.reduce((a, m) => a + m.gmvMinor, 0) <= mixed.gmvMinor, `sum=${mixed.byMethod.reduce((a, m) => a + m.gmvMinor, 0)} total=${mixed.gmvMinor}`);
+ok('boost revenue excluded from per-method commission', mixed.byMethod.reduce((a, m) => a + m.commissionMinor, 0) === mixed.commissionRevenueMinor, `byMethod=${mixed.byMethod.reduce((a, m) => a + m.commissionMinor, 0)} commission=${mixed.commissionRevenueMinor}`);
+
 // --- 7. a refunded sale gives back the commission ------------------------------
 // Move the second order to a disputable state, then refund it via dispute resolution.
 await j('POST', `/orders/${order2.id}/transition`, { token: seller, body: { action: 'pack' } });
