@@ -84,7 +84,31 @@ ok('settled fee grew by both commissions', earnings.settled.feeMinor - beforeEar
 ok('net = gross - fee', earnings.settled.netMinor === earnings.settled.grossMinor - earnings.settled.feeMinor);
 ok('earnings report the configured take rate', earnings.feeBps === FEE_BPS, `bps=${earnings.feeBps}`);
 
-// --- 7. authorization ---------------------------------------------------------
+// --- 7. a refunded sale gives back the commission ------------------------------
+// Move the second order to a disputable state, then refund it via dispute resolution.
+await j('POST', `/orders/${order2.id}/transition`, { token: seller, body: { action: 'pack' } });
+await j('POST', '/disputes', { token: buyer, body: { orderId: order2.id, reason: 'Item never arrived, seller unreachable' } });
+const disputes = (await j('GET', '/admin/disputes', { token: seller })).data;
+const mine = disputes.find((d) => d.orderId === order2.id);
+const beforeRefund = (await j('GET', '/admin/revenue?days=1', { token: seller })).data;
+const earnBeforeRefund = (await j('GET', '/me/earnings', { token: seller })).data;
+
+const resolved = await j('POST', `/admin/disputes/${mine.id}/resolve`, { token: seller, body: { status: 'RESOLVED_REFUND', resolution: 'Refunded to buyer' } });
+ok('admin resolves dispute as refund', resolved.status === 200 || resolved.status === 201, `status=${resolved.status}`);
+
+const afterRefund = (await j('GET', '/admin/revenue?days=1', { token: seller })).data;
+ok('refund recorded in the ledger', afterRefund.refundedMinor - beforeRefund.refundedMinor === PRICE, `delta=${afterRefund.refundedMinor - beforeRefund.refundedMinor}`);
+ok('commission reversed on refund', beforeRefund.feeRevenueMinor - afterRefund.feeRevenueMinor === expectedFee, `delta=${beforeRefund.feeRevenueMinor - afterRefund.feeRevenueMinor} expected=${expectedFee}`);
+
+const earnAfterRefund = (await j('GET', '/me/earnings', { token: seller })).data;
+ok('refunded sale drops out of seller settled earnings', earnBeforeRefund.settled.grossMinor - earnAfterRefund.settled.grossMinor === PRICE, `delta=${earnBeforeRefund.settled.grossMinor - earnAfterRefund.settled.grossMinor}`);
+
+// resolving again must not double-book the reversal
+await j('POST', `/admin/disputes/${mine.id}/resolve`, { token: seller, body: { status: 'RESOLVED_REFUND', resolution: 'again' } });
+const afterTwice = (await j('GET', '/admin/revenue?days=1', { token: seller })).data;
+ok('re-resolving does not double-book the refund', afterTwice.refundedMinor === afterRefund.refundedMinor, `${afterTwice.refundedMinor} vs ${afterRefund.refundedMinor}`);
+
+// --- 8. authorization ---------------------------------------------------------
 const asBuyer = await j('GET', '/admin/revenue', { token: buyer });
 ok('non-admin cannot read platform revenue', asBuyer.status === 403, `status=${asBuyer.status}`);
 const anon = await j('GET', '/me/earnings');

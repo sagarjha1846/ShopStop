@@ -50,7 +50,10 @@ export class RevenueService {
   async sellerEarnings(sellerId: string): Promise<SellerEarnings> {
     const [settledAgg, pendingAgg] = await Promise.all([
       this.prisma.order.aggregate({
-        where: { sellerId, payment: { status: 'CAPTURED' } },
+        // A refunded order keeps its CAPTURED payment, so it has to be excluded
+        // explicitly — otherwise a seller's settled earnings include sales whose
+        // money went back to the buyer.
+        where: { sellerId, payment: { status: 'CAPTURED' }, status: { not: OrderStatus.REFUNDED } },
         _sum: { totalMinor: true, feeMinor: true },
         _count: true,
       }),

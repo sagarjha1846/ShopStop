@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DisputeStatus, OrderStatus, type Dispute, type Prisma } from '@prisma/client';
+import { DisputeStatus, OrderStatus, TransactionType, type Dispute, type Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
@@ -86,13 +86,7 @@ export class DisputesService {
       data: { status, resolution, resolvedAt: new Date() },
     });
 
-    // A refund resolution moves the order to REFUNDED (ledger/refund automation: Phase 2).
-    if (status === DisputeStatus.RESOLVED_REFUND) {
-      await this.prisma.order.updateMany({
-        where: { id: dispute.orderId, status: { not: OrderStatus.REFUNDED } },
-        data: { status: OrderStatus.REFUNDED },
-      });
-    }
+    if (status === DisputeStatus.RESOLVED_REFUND) await this.bookRefund(dispute.orderId);
     await this.audit.record({
       actorId: adminId,
       action: `dispute.${status.toLowerCase()}`,
@@ -102,5 +96,55 @@ export class DisputesService {
       meta: { resolution },
     });
     return updated;
+  }
+
+  /**
+   * Move a refunded order to REFUNDED and record the money coming back out.
+   *
+   * Two ledger rows, not one. The REFUND row is the outflow to the buyer. The
+   * negative FEE row is a contra entry that backs out the commission: the
+   * platform does not keep its cut of a sale that was refunded, and without the
+   * reversal `SUM(FEE)` would report revenue the business never actually earned.
+   *
+   * Compare-and-set on the status so a second resolution attempt cannot book the
+   * refund twice.
+   */
+  private async bookRefund(orderId: string): Promise<void> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { totalMinor: true, feeMinor: true, currency: true, sellerId: true },
+    });
+    if (!order) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, status: { not: OrderStatus.REFUNDED } },
+        data: { status: OrderStatus.REFUNDED },
+      });
+      if (claimed.count === 0) return;
+
+      await tx.transaction.create({
+        data: {
+          orderId,
+          type: TransactionType.REFUND,
+          amountMinor: order.totalMinor,
+          currency: order.currency,
+          meta: { basis: 'order.refund' },
+        },
+      });
+
+      if (order.feeMinor > 0) {
+        await tx.transaction.create({
+          data: {
+            orderId,
+            userId: order.sellerId,
+            type: TransactionType.FEE,
+            amountMinor: -order.feeMinor,
+            currency: order.currency,
+            meta: { basis: 'order.commission.reversal' },
+          },
+        });
+      }
+    });
   }
 }
