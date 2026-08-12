@@ -4,6 +4,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AppError } from '../../../common/errors/app-error';
 import { RiskService } from '../../trust/risk.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { FeatureFlagsService } from '../../flags/feature-flags.service';
 
 const MAX_LEN = 500;
 
@@ -20,6 +21,7 @@ export class QuestionsService {
     private readonly prisma: PrismaService,
     private readonly risk: RiskService,
     private readonly notifications: NotificationsService,
+    private readonly flags: FeatureFlagsService,
   ) {}
 
   /** Visible Q&A for a listing. Public — no auth, so it never leaks asker emails. */
@@ -42,6 +44,9 @@ export class QuestionsService {
   }
 
   async ask(askerId: string, listingId: string, body: string): Promise<ListingQuestion> {
+    if (!(await this.flags.isEnabled('listings.questions'))) {
+      throw AppError.illegalState('Questions are currently closed');
+    }
     const text = body.trim();
     if (text.length < 5) throw AppError.validation('Question is too short');
     if (text.length > MAX_LEN) throw AppError.validation(`Question must be ${MAX_LEN} characters or fewer`);

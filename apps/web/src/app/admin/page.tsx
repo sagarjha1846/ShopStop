@@ -28,6 +28,13 @@ interface Dispute {
   status: string;
   order?: { id: string; totalMinor: number; currency: string } | null;
 }
+interface Flag {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  updatedAt: string | null;
+}
 interface FunnelMetric {
   key: string;
   label: string;
@@ -75,6 +82,20 @@ export default function AdminPage() {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [revenue, setRevenue] = useState<Revenue | null>(null);
   const [funnel, setFunnel] = useState<Funnel | null>(null);
+  const [flags, setFlags] = useState<Flag[]>([]);
+
+  async function toggleFlag(key: string, enabled: boolean) {
+    setMsg(null);
+    const previous = flags;
+    setFlags((f) => f.map((x) => (x.key === key ? { ...x, enabled } : x)));
+    try {
+      await apiAuthed(`/admin/feature-flags/${key}`, { method: 'PUT', body: { enabled } });
+      setMsg(`${key} ${enabled ? 'enabled' : 'disabled'}.`);
+    } catch (e) {
+      setFlags(previous);
+      setMsg(e instanceof Error ? e.message : 'Could not change that flag');
+    }
+  }
   const [msg, setMsg] = useState<string | null>(null);
 
   const loadQueue = useCallback(async () => {
@@ -98,12 +119,14 @@ export default function AdminPage() {
           // Revenue is the company's P&L — admins only, not moderators.
           if (me.role === 'ADMIN') {
             try {
-              const [rev, fun] = await Promise.all([
+              const [rev, fun, fl] = await Promise.all([
                 apiAuthed<Revenue>('/admin/revenue?days=30'),
                 apiAuthed<Funnel>('/admin/funnel?days=30'),
+                apiAuthed<Flag[]>('/admin/feature-flags'),
               ]);
               setRevenue(rev);
               setFunnel(fun);
+              setFlags(fl);
             } catch {
               /* ignore */
             }
@@ -145,6 +168,39 @@ export default function AdminPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Trust &amp; Safety console</h1>
       {msg && <p className="text-sm text-accent">{msg}</p>}
+
+      {flags.length > 0 && (
+        <section className="rounded-lg border bg-surface p-4">
+          <h2 className="font-semibold">Switches</h2>
+          <p className="mt-1 text-xs text-muted">
+            Operational controls that take effect without a deploy. Every change is written to the
+            audit log.
+          </p>
+          <ul className="mt-3 divide-y">
+            {flags.map((f) => (
+              <li key={f.key} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div className="max-w-xl">
+                  <div className="text-sm font-medium">{f.label}</div>
+                  <div className="text-xs text-muted">{f.description}</div>
+                  <code className="text-[11px] text-muted">{f.key}</code>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-brand"
+                    checked={f.enabled}
+                    aria-label={`Toggle ${f.key}`}
+                    onChange={(e) => toggleFlag(f.key, e.target.checked)}
+                  />
+                  <span className={f.enabled ? 'text-success' : 'text-muted'}>
+                    {f.enabled ? 'On' : 'Off'}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {funnel && (
         <section className="rounded-lg border bg-surface p-4">

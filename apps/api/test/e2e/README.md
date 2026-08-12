@@ -19,6 +19,7 @@ node test/e2e/boosts.e2e.mjs     # sponsored placement is sold: pay → activate
 node test/e2e/subscriptions.e2e.mjs  # paid seller plans: capability, never a trust badge
 node test/e2e/funnel.e2e.mjs     # the PRD's success metrics computed from live data
 node test/e2e/questions.e2e.mjs  # public listing Q&A: ask → answer → counts as liquidity
+node test/e2e/feature-flags.e2e.mjs  # switches that change behaviour, not just persist
 # realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
 node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
@@ -59,6 +60,11 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   seller answers, answered once), prohibited-keyword screening shared with
   listings, public reads that expose a handle and never an email, asker notified
   on answer, moderation hide, and a question counting toward funnel liquidity.
+- **feature-flags**: admin-only, declared flags listed even when never set,
+  unknown keys rejected as 422, and both switches proven to change behaviour —
+  commission drops to zero and back, an order priced fee-free stays fee-free
+  after re-enabling, the Q&A kill switch closes asking while leaving existing
+  answers readable. Restores flags on exit, since they are global state.
 
 CI runs these against an ephemeral stack (see `.github/workflows/ci.yml`, extended
 in Phase 7). For a typed integration suite, these can be ported to Jest + supertest.

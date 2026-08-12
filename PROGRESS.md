@@ -116,7 +116,12 @@ Design package (docs/) is complete; this tracks **implementation**.
       window. Booked as a separate revenue stream — deliberately not counted as GMV, since
       ad spend is not merchandise — verified 20/20
 
-## Phase 9 — Measurement (can we tell if it works?)
+## Phase 9 — Measurement & operations
+- [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
+      cache with immediate local invalidation, audited on every change. Wired to real
+      behaviour rather than left as CRUD — `monetization.commission` prices orders at 0%
+      (the launch phase from docs/18 R5, no redeploy) and `listings.questions` is a kill
+      switch for the public Q&A surface — verified 16/16
 - [x] Funnel report: the PRD's success metrics (docs/01 §7) computed from live operational
       data — activation, liquidity, conversion, dispute rate, verified-party share, retention
       proxy, plus the north star (dispute-free transactions/week). Derived from listings /
@@ -127,8 +132,8 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 13 black-box E2E suites (210 API checks); CI runs unit +
-      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions E2E
+- [x] Test suites: 41 unit + 14 black-box E2E suites (248 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,

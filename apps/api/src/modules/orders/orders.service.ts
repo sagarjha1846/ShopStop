@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { TrustScoreService } from '../trust/trust-score.service';
 import { AppConfigService } from '../../config/config.service';
+import { FeatureFlagsService } from '../flags/feature-flags.service';
 import { resolveTransition, type OrderAction, type OrderActor } from './order.state';
 import type { CreateOrderDto } from './dto/order.dto';
 
@@ -24,6 +25,7 @@ export class OrdersService {
     private readonly coupons: CouponsService,
     private readonly trust: TrustScoreService,
     private readonly config: AppConfigService,
+    private readonly flags: FeatureFlagsService,
   ) {}
 
   /**
@@ -66,7 +68,11 @@ export class OrdersService {
     // Buyer pays subtotal minus discount; the platform's cut comes out of the
     // seller's proceeds, so the fee is computed on the discounted amount.
     const totalMinor = subtotalMinor - discountMinor;
-    const feeMinor = Math.round((totalMinor * this.platformFeeBps) / 10_000);
+    // The commission flag lets the launch phase run fee-free without a redeploy
+    // (docs/18 R5). The rate is still snapshotted per order, so orders priced
+    // while it was off stay at zero even after it is switched back on.
+    const commissionOn = await this.flags.isEnabled('monetization.commission');
+    const feeMinor = commissionOn ? Math.round((totalMinor * this.platformFeeBps) / 10_000) : 0;
 
     const timeline: TimelineEntry[] = [
       { status: OrderStatus.PENDING, actor: 'buyer', at: new Date().toISOString() },

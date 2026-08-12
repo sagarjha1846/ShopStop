@@ -85,6 +85,7 @@ ok('net = gross - fee', earnings.settled.netMinor === earnings.settled.grossMino
 ok('earnings report the configured take rate', earnings.feeBps === FEE_BPS, `bps=${earnings.feeBps}`);
 
 // --- 6b. commission margin by payment method ----------------------------------
+const beforeCard = (await j('GET', '/admin/revenue?days=1', { token: seller })).data.byMethod.find((m) => m.method === 'card');
 // Fund one order by card. Commission is priced at ~card MDR, so this is the case
 // that decides whether the take rate earns anything — it must show ~zero net.
 const cardOrder = (await j('POST', '/orders', { token: buyer, headers: { 'idempotency-key': `rev3-${RUN}` }, body: { listingId: listing.id } })).data;
@@ -97,8 +98,15 @@ await fetch(`${B}/payments/webhook/razorpay`, { method: 'POST', headers: { 'cont
 const mixed = (await j('GET', '/admin/revenue?days=1', { token: seller })).data;
 const card = mixed.byMethod.find((m) => m.method === 'card');
 ok('card volume reported separately', !!card, `methods=${mixed.byMethod.map((m) => m.method)}`);
-ok('card gateway cost ≈ the commission charged', card.estGatewayCostMinor === card.commissionMinor, `cost=${card?.estGatewayCostMinor} commission=${card?.commissionMinor}`);
-ok('card commission nets ~zero (the F2 finding, measured)', card.estNetMinor === 0, `net=${card?.estNetMinor}`);
+// Measured as the delta this order caused, not as equality over accumulated card
+// totals: any historical card order that priced at a different rate (a promo
+// window, or the commission flag switched off) would otherwise break an equality
+// that has nothing to do with what this test just did.
+const cardBefore = beforeCard ?? { estGatewayCostMinor: 0, commissionMinor: 0, estNetMinor: 0 };
+const dGateway = card.estGatewayCostMinor - cardBefore.estGatewayCostMinor;
+const dCommission = card.commissionMinor - cardBefore.commissionMinor;
+ok('card gateway cost ≈ the commission charged', dGateway === dCommission, `Δcost=${dGateway} Δcommission=${dCommission}`);
+ok('card commission nets ~zero (the F2 finding, measured)', card.estNetMinor - cardBefore.estNetMinor === 0, `Δnet=${card.estNetMinor - cardBefore.estNetMinor}`);
 const upi = mixed.byMethod.find((m) => m.method === 'upi');
 ok('revenue splits by payment method', !!upi, `methods=${mixed.byMethod.map((m) => m.method)}`);
 ok('UPI is costed at zero MDR', upi.estGatewayCostMinor === 0, `cost=${upi.estGatewayCostMinor}`);
