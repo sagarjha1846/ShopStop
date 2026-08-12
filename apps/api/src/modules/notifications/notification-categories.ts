@@ -79,6 +79,7 @@ export const CATEGORY_KEYS = NOTIFICATION_CATEGORIES.map((c) => c.key);
 const CATEGORY_BY_PREFIX: Readonly<Record<string, string>> = {
   order: 'orders',
   message: 'messages',
+  question: 'messages', // public Q&A is still buyer↔seller contact
   offer: 'offers',
   trust: 'trust',
   dispute: 'trust',

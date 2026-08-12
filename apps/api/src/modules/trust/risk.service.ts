@@ -117,6 +117,16 @@ export class RiskService {
     return { score, band, signals };
   }
 
+  /**
+   * Does this free text contain a prohibited keyword? Exposed so any surface that
+   * publishes user text (listings, public Q&A) screens against the same dictionary
+   * rather than growing its own.
+   */
+  matchBlockedKeyword(text: string): string | null {
+    const haystack = text.toLowerCase();
+    return RiskService.BLOCKED_KEYWORDS.find((kw) => haystack.includes(kw)) ?? null;
+  }
+
   /** Persist a fraud event for the admin queue (docs/10). */
   async recordListingFraudEvent(
     listingId: string,

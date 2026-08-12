@@ -18,6 +18,7 @@ node test/e2e/revenue.e2e.mjs    # commission booked to the ledger → earnings 
 node test/e2e/boosts.e2e.mjs     # sponsored placement is sold: pay → activate → book revenue
 node test/e2e/subscriptions.e2e.mjs  # paid seller plans: capability, never a trust badge
 node test/e2e/funnel.e2e.mjs     # the PRD's success metrics computed from live data
+node test/e2e/questions.e2e.mjs  # public listing Q&A: ask → answer → counts as liquidity
 # realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
 node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
@@ -54,6 +55,10 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   denominators report null rather than a fake zero, and the report tracks real
   activity (publishing widens the liquidity denominator, a first message moves
   the numerator).
+- **questions**: auth + ABAC (seller can't ask on their own listing, only the
+  seller answers, answered once), prohibited-keyword screening shared with
+  listings, public reads that expose a handle and never an email, asker notified
+  on answer, moderation hide, and a question counting toward funnel liquidity.
 
 CI runs these against an ephemeral stack (see `.github/workflows/ci.yml`, extended
 in Phase 7). For a typed integration suite, these can be ported to Jest + supertest.

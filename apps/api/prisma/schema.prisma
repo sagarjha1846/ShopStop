@@ -81,6 +81,8 @@ model User {
   notifyPrefs    NotificationPreference[]
   boostPurchases BoostPurchase[]
   subscriptions  Subscription[]
+  questionsAsked ListingQuestion[] @relation("QuestionAsker")
+  questionsAnswered ListingQuestion[] @relation("QuestionAnswerer")
 
   @@index([status])
   @@map("users")
@@ -239,6 +241,7 @@ model Listing {
 
   @@index([status, publishedAt])
   boostPurchases BoostPurchase[]
+  questions      ListingQuestion[]
 
   @@index([categoryId, status])
   @@index([sellerId, status])
@@ -519,6 +522,31 @@ model Message {
   @@map("messages")
 }
 
+/// A public question on a listing, optionally answered by the seller.
+///
+/// Public on purpose: unlike a private chat, one good answer serves every future
+/// buyer, which is why this is a liquidity feature and not just another inbox.
+/// Because it is public it is moderatable — hiddenAt takes it out of view without
+/// destroying the record.
+model ListingQuestion {
+  id           String    @id @default(cuid())
+  listingId    String    @map("listing_id")
+  askerId      String    @map("asker_id")
+  body         String
+  answerBody   String?   @map("answer_body")
+  answeredById String?   @map("answered_by_id")
+  answeredAt   DateTime? @map("answered_at")
+  hiddenAt     DateTime? @map("hidden_at") // moderation take-down
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  listing    Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  asker      User    @relation("QuestionAsker", fields: [askerId], references: [id], onDelete: Cascade)
+  answeredBy User?   @relation("QuestionAnswerer", fields: [answeredById], references: [id])
+
+  @@index([listingId, createdAt])
+  @@map("listing_questions")
+}
+
 // ----------------------------------------------------------------------------
 // Reviews, Wishlist, Follow, Notifications
 // ----------------------------------------------------------------------------
@@ -706,6 +734,7 @@ enum ReportSubject {
   LISTING
   USER
   MESSAGE
+  QUESTION
 }
 
 enum ReportStatus {

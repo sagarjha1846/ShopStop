@@ -120,6 +120,7 @@ jobs:
           node test/e2e/boosts.e2e.mjs
           node test/e2e/subscriptions.e2e.mjs
           node test/e2e/funnel.e2e.mjs
+          node test/e2e/questions.e2e.mjs
 
   security:
     runs-on: ubuntu-latest

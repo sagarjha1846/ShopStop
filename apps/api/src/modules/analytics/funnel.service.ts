@@ -74,9 +74,15 @@ export class FunnelService {
                  COUNT(*) AS cohort
           FROM cohort c
         `,
-        // Liquidity — published listings that drew at least one conversation.
+        // Liquidity — published listings that drew any buyer contact. A public
+        // question counts alongside a chat thread: it is the same signal (a buyer
+        // engaged this listing) at a lower commitment, and excluding it would
+        // undercount exactly the engagement Q&A exists to create.
         this.prisma.$queryRaw<Array<{ withthread: bigint; published: bigint }>>`
-          SELECT COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM threads t WHERE t.listing_id = l.id)) AS withthread,
+          SELECT COUNT(*) FILTER (
+                   WHERE EXISTS (SELECT 1 FROM threads t WHERE t.listing_id = l.id)
+                      OR EXISTS (SELECT 1 FROM listing_questions q WHERE q.listing_id = l.id AND q.hidden_at IS NULL)
+                 ) AS withthread,
                  COUNT(*) AS published
           FROM listings l
           WHERE l.published_at >= ${since} AND l.deleted_at IS NULL
@@ -188,7 +194,8 @@ export class FunnelService {
           'Verified share of sign-ups in the window.'),
         metric('activation', 'Listed or messaged within 7 days', n(activation[0]?.activated), n(activation[0]?.cohort), 25, 'gte', 'pct',
           'Only counts sign-ups that have had a full 7 days.'),
-        metric('liquidity', 'Listing → first message', n(liquidity[0]?.withthread), n(liquidity[0]?.published), 15),
+        metric('liquidity', 'Listing → buyer contact', n(liquidity[0]?.withthread), n(liquidity[0]?.published), 15, 'gte', 'pct',
+          'Counts a chat thread or a public question.'),
         metric('conversion', 'Message → paid transaction', n(conversion[0]?.converted), n(conversion[0]?.threads), 8),
         metric('disputeRate', 'Disputes per 100 transactions', n(disputes[0]?.disputed), n(disputes[0]?.paid), 2, 'lte', 'per100'),
         metric('verifiedParty', 'Transactions with a verified party', n(verified[0]?.withverified), n(verified[0]?.total), 70),
