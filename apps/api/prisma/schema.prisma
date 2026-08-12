@@ -615,6 +615,8 @@ model Subscription {
   provider          PaymentProvider    @default(RAZORPAY)
   providerOrderId   String?            @unique @map("provider_order_id")
   providerPaymentId String?            @unique @map("provider_payment_id")
+  /// Included sponsored-placement days consumed in the current period.
+  boostDaysUsed      Int                @default(0) @map("boost_days_used")
   currentPeriodStart DateTime?         @map("current_period_start")
   currentPeriodEnd   DateTime?         @map("current_period_end")
   cancelledAt        DateTime?         @map("cancelled_at")
@@ -645,6 +647,8 @@ model BoostPurchase {
   listingId         String          @map("listing_id")
   sellerId          String          @map("seller_id")
   days              Int
+  /// Days covered by a plan's included credit; the rest is charged.
+  creditDays        Int             @default(0) @map("credit_days")
   amountMinor       Int             @map("amount_minor")
   currency          String          @default("INR")
   status            BoostStatus     @default(PENDING_PAYMENT)

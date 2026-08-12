@@ -94,6 +94,44 @@ const proStatuses = [];
 for (let i = 0; i < 12; i++) proStatuses.push(await publish(seller, i));
 ok('Pro seller publishes straight through at the same volume', proStatuses.every((s) => s === 'ACTIVE'), `statuses=${proStatuses.slice(-3)}`);
 
+// --- 7c. the included boost credit is actually redeemable ---------------------
+// The plan advertises included promotion days; they have to be spendable, and
+// spending them must not book revenue a second time.
+const proListing = (await j('POST', '/listings', { token: seller, body: { categoryId: catId, title: `Credit Listing ${RUN}`, description: 'boost credit redemption test', priceMinor: 400000, attributes: { brand: 'B', model: 'M', storage: '128GB' }, publish: true } })).data;
+ok('Pro seller can publish the test listing', proListing.status === 'ACTIVE', `status=${proListing.status}`);
+
+const pricingBefore = (await j('GET', '/boosts/pricing', { token: seller })).data;
+ok('pricing shows the remaining included days', pricingBefore.includedDaysRemaining === pro.includedBoostDays, `remaining=${pricingBefore.includedDaysRemaining}`);
+
+const revB4 = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+const covered = (await j('POST', `/listings/${proListing.id}/boost`, { token: seller, body: { days: 3 } })).data;
+ok('a boost within credit costs nothing', covered.amountMinor === 0, `amount=${covered.amountMinor}`);
+ok('and goes live immediately', covered.activated === true && covered.creditDays === 3, `activated=${covered.activated} credit=${covered.creditDays}`);
+const boostedListing = (await j('GET', `/listings/${proListing.id}`)).data;
+ok('the listing is actually promoted', !!boostedListing.boostedUntil, `until=${boostedListing.boostedUntil}`);
+
+const revAfterCredit = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+ok('credit-covered boost books no extra revenue', revAfterCredit.boostRevenueMinor === revB4.boostRevenueMinor, `${revAfterCredit.boostRevenueMinor} vs ${revB4.boostRevenueMinor}`);
+
+const pricingMid = (await j('GET', '/boosts/pricing', { token: seller })).data;
+ok('credit is consumed', pricingMid.includedDaysRemaining === pro.includedBoostDays - 3, `remaining=${pricingMid.includedDaysRemaining}`);
+
+// A boost larger than the remaining credit is part-covered, part-charged.
+const partial = (await j('POST', `/listings/${proListing.id}/boost`, { token: seller, body: { days: 5 } })).data;
+ok('excess beyond credit is charged', partial.creditDays === 2 && partial.amountMinor === 3 * pricingBefore.pricePerDayMinor, `credit=${partial.creditDays} amount=${partial.amountMinor}`);
+ok('part-paid boost awaits payment', partial.activated === false && !!partial.providerOrderId);
+
+const pricingAfter = (await j('GET', '/boosts/pricing', { token: seller })).data;
+ok('credit is now exhausted', pricingAfter.includedDaysRemaining === 0, `remaining=${pricingAfter.includedDaysRemaining}`);
+
+// With no credit left, a further boost is charged in full.
+const fullPrice = (await j('POST', `/listings/${proListing.id}/boost`, { token: seller, body: { days: 2 } })).data;
+ok('boosts past the credit are charged in full', fullPrice.creditDays === 0 && fullPrice.amountMinor === 2 * pricingBefore.pricePerDayMinor, `credit=${fullPrice.creditDays} amount=${fullPrice.amountMinor}`);
+
+// A free seller has no credit and pays from the first day.
+const freePricing = (await j('GET', '/boosts/pricing', { token: freeSeller })).data;
+ok('free sellers have no included days', freePricing.includedDaysRemaining === 0, `remaining=${freePricing.includedDaysRemaining}`);
+
 // --- 8. cancelling keeps the period already paid for --------------------------
 const cancelled = await j('DELETE', '/me/subscription', { token: seller });
 ok('cancel succeeds', cancelled.status === 200, `status=${cancelled.status}`);

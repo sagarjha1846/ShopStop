@@ -5,21 +5,27 @@ import {
   PaymentProvider as ProviderEnum,
   TransactionType,
   type BoostPurchase,
+  type Prisma,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AppConfigService } from '../../config/config.service';
 import { AppError } from '../../common/errors/app-error';
+import { SubscriptionsService } from './subscriptions.service';
 import type { IPaymentProvider } from './provider/payment-provider';
 
 export interface BoostQuote {
   boostId: string;
   listingId: string;
   days: number;
+  /** Days covered by the seller's plan credit. */
+  creditDays: number;
+  /** What is left to pay after credit. Zero means it is already live. */
   amountMinor: number;
   currency: string;
   provider: ProviderEnum;
-  providerOrderId: string;
-  clientToken: string;
+  providerOrderId: string | null;
+  clientToken: string | null;
+  activated: boolean;
 }
 
 const MAX_BOOST_DAYS = 30;
@@ -39,6 +45,7 @@ export class BoostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: AppConfigService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   pricePerDayMinor(): number {
@@ -67,42 +74,95 @@ export class BoostsService {
     }
 
     const normalizedDays = this.normalizeDays(days);
-    const amountMinor = normalizedDays * this.pricePerDayMinor();
-    if (amountMinor <= 0) throw AppError.validation('Boost pricing is not configured');
+    if (this.pricePerDayMinor() <= 0) throw AppError.validation('Boost pricing is not configured');
+
+    // A paid plan's included days are spent before anything is charged. Reserved
+    // up front (like a coupon redemption) and released if the purchase fails.
+    const reserved = await this.subscriptions.reserveBoostDays(sellerId, normalizedDays);
+    const creditDays = reserved?.days ?? 0;
+    const amountMinor = (normalizedDays - creditDays) * this.pricePerDayMinor();
 
     const purchase = await this.prisma.boostPurchase.create({
       data: {
         listingId,
         sellerId,
         days: normalizedDays,
+        creditDays,
         amountMinor,
         currency: listing.currency,
         provider: provider.key,
       },
     });
 
-    const intent = await provider.createIntent({
-      amountMinor,
-      currency: listing.currency,
-      orderId: purchase.id,
-      receipt: `bst_${purchase.id.slice(-16)}`,
-    });
+    // Fully covered by plan credit: nothing to charge, so it goes live now. No
+    // ledger row either — that revenue was already booked with the subscription,
+    // and booking it again would count the same rupees twice.
+    if (amountMinor === 0) {
+      await this.activateCoveredPurchase(purchase.id);
+      return {
+        boostId: purchase.id,
+        listingId,
+        days: normalizedDays,
+        creditDays,
+        amountMinor: 0,
+        currency: listing.currency,
+        provider: provider.key,
+        providerOrderId: null,
+        clientToken: null,
+        activated: true,
+      };
+    }
 
-    await this.prisma.boostPurchase.update({
-      where: { id: purchase.id },
-      data: { providerOrderId: intent.providerOrderId },
-    });
+    try {
+      const intent = await provider.createIntent({
+        amountMinor,
+        currency: listing.currency,
+        orderId: purchase.id,
+        receipt: `bst_${purchase.id.slice(-16)}`,
+      });
 
-    return {
-      boostId: purchase.id,
-      listingId,
-      days: normalizedDays,
-      amountMinor,
-      currency: listing.currency,
-      provider: provider.key,
-      providerOrderId: intent.providerOrderId,
-      clientToken: intent.clientToken,
-    };
+      await this.prisma.boostPurchase.update({
+        where: { id: purchase.id },
+        data: { providerOrderId: intent.providerOrderId },
+      });
+
+      return {
+        boostId: purchase.id,
+        listingId,
+        days: normalizedDays,
+        creditDays,
+        amountMinor,
+        currency: listing.currency,
+        provider: provider.key,
+        providerOrderId: intent.providerOrderId,
+        clientToken: intent.clientToken,
+        activated: false,
+      };
+    } catch (err) {
+      // Never strand reserved credit on a purchase that never got a payment.
+      if (reserved) await this.subscriptions.releaseBoostDays(reserved.subscriptionId, reserved.days);
+      throw err;
+    }
+  }
+
+  /** Activate a purchase that plan credit covered in full — no gateway involved. */
+  private async activateCoveredPurchase(purchaseId: string): Promise<void> {
+    const purchase = await this.prisma.boostPurchase.findUniqueOrThrow({ where: { id: purchaseId } });
+    const startsAt = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.boostPurchase.updateMany({
+        where: { id: purchaseId, status: BoostStatus.PENDING_PAYMENT },
+        data: {
+          status: BoostStatus.ACTIVE,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + purchase.days * 86_400_000),
+        },
+      });
+      if (claimed.count === 0) return;
+      await this.extendWindow(tx, purchase.listingId, purchase.days, startsAt);
+    });
+    this.logger.log(`Boost ${purchaseId} activated from plan credit (${purchase.days}d)`);
   }
 
   /**
@@ -136,18 +196,7 @@ export class BoostsService {
       });
       if (claimed.count === 0) return false;
 
-      // Extend from whichever is later: an unexpired existing window, or now — so
-      // buying a second boost stacks instead of truncating what was already paid for.
-      const listing = await tx.listing.findUnique({
-        where: { id: purchase.listingId },
-        select: { boostedUntil: true },
-      });
-      const base =
-        listing?.boostedUntil && listing.boostedUntil > startsAt ? listing.boostedUntil : startsAt;
-      await tx.listing.update({
-        where: { id: purchase.listingId },
-        data: { boostedUntil: new Date(base.getTime() + purchase.days * 86_400_000) },
-      });
+      await this.extendWindow(tx, purchase.listingId, purchase.days, startsAt);
 
       // Boost spend is 100% platform revenue, so it is booked as FEE only — no
       // CHARGE row. GMV must stay merchandise value; counting ad spend as GMV
@@ -169,13 +218,41 @@ export class BoostsService {
     return activated;
   }
 
-  /** Mark a boost purchase failed so it stops showing as awaiting payment. */
+  /**
+   * Extend the listing's sponsored window from whichever is later: an unexpired
+   * existing window, or now. Stacking rather than overwriting means a second
+   * boost never truncates time already paid for.
+   */
+  private async extendWindow(
+    tx: Prisma.TransactionClient,
+    listingId: string,
+    days: number,
+    from: Date,
+  ): Promise<void> {
+    const listing = await tx.listing.findUnique({ where: { id: listingId }, select: { boostedUntil: true } });
+    const base = listing?.boostedUntil && listing.boostedUntil > from ? listing.boostedUntil : from;
+    await tx.listing.update({
+      where: { id: listingId },
+      data: { boostedUntil: new Date(base.getTime() + days * 86_400_000) },
+    });
+  }
+
+  /** Mark a boost purchase failed, and hand back any plan credit it was holding. */
   async failFromWebhook(providerOrderId: string): Promise<boolean> {
+    const purchase = await this.prisma.boostPurchase.findUnique({ where: { providerOrderId } });
+    if (!purchase || purchase.status !== BoostStatus.PENDING_PAYMENT) return false;
+
     const res = await this.prisma.boostPurchase.updateMany({
-      where: { providerOrderId, status: BoostStatus.PENDING_PAYMENT },
+      where: { id: purchase.id, status: BoostStatus.PENDING_PAYMENT },
       data: { status: BoostStatus.FAILED },
     });
-    return res.count > 0;
+    if (res.count === 0) return false;
+
+    if (purchase.creditDays > 0) {
+      const sub = await this.subscriptions.current(purchase.sellerId);
+      if (sub) await this.subscriptions.releaseBoostDays(sub.id, purchase.creditDays);
+    }
+    return true;
   }
 
   async listForSeller(sellerId: string): Promise<BoostPurchase[]> {

@@ -4,6 +4,7 @@ import { PaymentProvider as ProviderEnum } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { PaymentsService } from './payments.service';
 import { BoostsService } from './boosts.service';
+import { SubscriptionsService } from './subscriptions.service';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/types';
 
@@ -30,16 +31,18 @@ export class BoostsController {
   constructor(
     private readonly payments: PaymentsService,
     private readonly boosts: BoostsService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
-  /** Current boost pricing, so the UI can show the cost before committing. */
+  /** Current boost pricing, plus any plan credit the caller can spend first. */
   @Get('boosts/pricing')
-  pricing() {
+  async pricing(@CurrentUser() user: AuthUser) {
     const perDay = this.boosts.pricePerDayMinor();
     return {
       currency: 'INR',
       pricePerDayMinor: perDay,
       maxDays: 30,
+      includedDaysRemaining: await this.subscriptions.boostDaysRemaining(user.id),
       examples: [7, 14, 30].map((days) => ({ days, amountMinor: this.boosts.quoteMinor(days) })),
     };
   }

@@ -99,6 +99,53 @@ export class SubscriptionsService {
     return (await this.isPro(userId)) ? PRO_LISTING_VELOCITY : FREE_LISTING_VELOCITY;
   }
 
+  /** Included sponsored-placement days left in the current period. */
+  async boostDaysRemaining(userId: string): Promise<number> {
+    const sub = await this.current(userId);
+    if (!sub) return 0;
+    return Math.max(PRO_INCLUDED_BOOST_DAYS - sub.boostDaysUsed, 0);
+  }
+
+  /**
+   * Reserve included boost days, returning how many were actually taken.
+   *
+   * Conditional update rather than read-then-write: two boosts bought at once
+   * would otherwise both see the same remaining balance and spend it twice,
+   * giving away placement that was never included.
+   */
+  async reserveBoostDays(
+    userId: string,
+    wanted: number,
+    attempt = 0,
+  ): Promise<{ subscriptionId: string; days: number } | null> {
+    if (wanted <= 0 || attempt > 3) return null;
+    const sub = await this.current(userId);
+    if (!sub) return null;
+
+    const available = Math.max(PRO_INCLUDED_BOOST_DAYS - sub.boostDaysUsed, 0);
+    const days = Math.min(wanted, available);
+    if (days <= 0) return null;
+
+    const claimed = await this.prisma.subscription.updateMany({
+      where: { id: sub.id, boostDaysUsed: sub.boostDaysUsed },
+      data: { boostDaysUsed: sub.boostDaysUsed + days },
+    });
+    // Lost the race to a concurrent purchase — retry against fresh state, bounded
+    // so a pathological contention loop can't spin forever.
+    if (claimed.count === 0) return this.reserveBoostDays(userId, wanted, attempt + 1);
+
+    return { subscriptionId: sub.id, days };
+  }
+
+  /** Give reserved days back when the purchase they were held for never completes. */
+  async releaseBoostDays(subscriptionId: string, days: number): Promise<void> {
+    if (days <= 0) return;
+    await this.prisma.subscription.updateMany({
+      where: { id: subscriptionId, boostDaysUsed: { gte: days } },
+      data: { boostDaysUsed: { decrement: days } },
+    });
+  }
+
   /** Start a subscription: record it pending and open a gateway intent. */
   async subscribe(userId: string, provider: IPaymentProvider): Promise<SubscriptionQuote> {
     if (await this.isPro(userId)) throw AppError.conflict('You already have an active Pro plan');
