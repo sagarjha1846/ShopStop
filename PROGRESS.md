@@ -44,6 +44,9 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Saved searches: store+list+run(re-execute)+delete (new migration; FTS column declared Unsupported) — verified
 - [x] Wishlist: add/remove/has/list API + listing heart toggle + /wishlist page (verified)
 - [x] Address book: CRUD API (auto-default, default reassignment, ABAC) + /addresses page (verified)
+- [x] Public listing Q&A (docs/03 §5): ask/answer/list + moderation hide, seller-only answers,
+      shared prohibited-keyword screening, handles never emails in public reads, asker notified
+      on answer. Counts toward funnel liquidity alongside chat threads — verified 18/18
 
 ## Phase 4 — Commerce  ✅ verified end-to-end (24/24 E2E)
 - [x] Idempotency interceptor (Redis: fingerprint + in-flight lock + cache-before-emit)
@@ -124,8 +127,8 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 12 black-box E2E suites (192 API checks); CI runs unit +
-      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel E2E
+- [x] Test suites: 41 unit + 13 black-box E2E suites (210 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,

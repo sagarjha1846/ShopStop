@@ -4,6 +4,7 @@ import { api, ApiError, type Listing } from '@/lib/api';
 import { formatMoney, mediaUrl } from '@/lib/format';
 import { SellerTrustPanel } from '@/components/TrustPanel';
 import { WishlistButton } from '@/components/WishlistButton';
+import { ListingQuestions } from '@/components/ListingQuestions';
 import { Badge, LinkButton } from '@/components/ui';
 
 async function getListing(id: string): Promise<Listing | null> {
@@ -98,6 +99,8 @@ export default async function ListingPage({ params }: { params: Promise<{ id: st
           <h2 className="mb-2 font-semibold">Description</h2>
           <p className="whitespace-pre-line text-sm leading-relaxed">{listing.description}</p>
         </section>
+
+        <ListingQuestions listingId={listing.id} sellerId={listing.sellerId} />
       </div>
 
       {/* Sticky buy column */}

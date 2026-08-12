@@ -101,6 +101,7 @@ export interface Listing {
   attributes?: Record<string, unknown>;
   media?: ListingMedia[];
   locationText?: string | null;
+  sellerId: string;
   seller?: {
     profile?: { handle: string; displayName: string; avatarUrl?: string | null } | null;
     trustScore?: { score: number } | null;
