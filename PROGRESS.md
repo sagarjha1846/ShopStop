@@ -102,7 +102,11 @@ Design package (docs/) is complete; this tracks **implementation**.
       on capture, booked as its own revenue stream. Sells *capability* — listing allowance 10→50/hr
       enforced in the risk engine, included boost credit — and deliberately not trust: the
       BUSINESS/IDENTITY badges stay tied to verification and are asserted unbuyable in the E2E.
-      Cancelling keeps the period already paid for — verified 29/29
+      Cancelling keeps the period already paid for. Included boost credit is redeemable:
+      boosts spend plan days before charging (full or partial coverage), credit-covered
+      boosts book no revenue (already paid via the subscription), reserve/release on
+      failure, conditional update so concurrent boosts can't spend the same balance
+      — verified 41/41
 - [x] Paid sponsored placement: boosts were free + unlimited (lost revenue, and a boost
       everyone can take signals nothing). Now priced (BOOST_PRICE_PER_DAY_MINOR), sold via
       the existing provider port, and activated only on capture; stacks onto an unexpired
@@ -110,7 +114,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       ad spend is not merchandise — verified 20/20
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 11 black-box E2E suites (158 API checks); CI runs unit +
+- [x] Test suites: 41 unit + 11 black-box E2E suites (170 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts/subscriptions E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live

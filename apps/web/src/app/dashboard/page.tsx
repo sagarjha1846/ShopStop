@@ -32,6 +32,7 @@ interface BoostPricing {
   currency: string;
   pricePerDayMinor: number;
   maxDays: number;
+  includedDaysRemaining: number;
 }
 interface Me {
   id: string;
@@ -99,15 +100,30 @@ export default function DashboardPage() {
     setBoosting(listingId);
     setBoostMsg(null);
     try {
-      const quote = await apiAuthed<{ amountMinor: number; currency: string }>(
-        `/listings/${listingId}/boost`,
-        { method: 'POST', body: { days: 7 } },
-      );
-      // Mirrors the order pay flow: a real client opens gateway checkout with the
-      // returned token, and the boost activates on the capture webhook.
-      setBoostMsg(
-        `Boost of ${formatMoney(quote.amountMinor, quote.currency)} started — complete payment at checkout to go live.`,
-      );
+      // Spend included plan days first when the seller has any.
+      const days = pricing?.includedDaysRemaining ? Math.min(pricing.includedDaysRemaining, 7) : 7;
+      const quote = await apiAuthed<{
+        amountMinor: number;
+        currency: string;
+        creditDays: number;
+        activated: boolean;
+      }>(`/listings/${listingId}/boost`, { method: 'POST', body: { days } });
+
+      if (quote.activated) {
+        setBoostMsg(`Promoted for ${quote.creditDays} day(s) using your included credit.`);
+        const [refreshed, freshPricing] = await Promise.all([
+          apiAuthed<{ items: Listing[] }>(`/listings?sellerId=${me?.id}`),
+          apiAuthed<BoostPricing>('/boosts/pricing'),
+        ]);
+        setListings(refreshed.items);
+        setPricing(freshPricing);
+      } else {
+        // Mirrors the order pay flow: a real client opens gateway checkout with the
+        // returned token, and the boost activates on the capture webhook.
+        setBoostMsg(
+          `Boost of ${formatMoney(quote.amountMinor, quote.currency)} started — complete payment at checkout to go live.`,
+        );
+      }
     } catch (e) {
       setBoostMsg(e instanceof Error ? e.message : 'Could not start the boost');
     } finally {
@@ -297,7 +313,9 @@ export default function DashboardPage() {
                     >
                       {boosting === l.id
                         ? 'Starting…'
-                        : `Promote 7d · ${formatMoney(pricing.pricePerDayMinor * 7, pricing.currency)}`}
+                        : pricing.includedDaysRemaining > 0
+                          ? `Promote ${Math.min(pricing.includedDaysRemaining, 7)}d · included`
+                          : `Promote 7d · ${formatMoney(pricing.pricePerDayMinor * 7, pricing.currency)}`}
                     </Button>
                   )
                 )}
