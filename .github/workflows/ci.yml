@@ -37,9 +37,10 @@ jobs:
       JWT_REFRESH_SECRET: ci-refresh-secret-00000000000000
     steps:
       - uses: actions/checkout@v4
+      # No `version:` here on purpose. pnpm/action-setup errors out when a version
+      # is given alongside package.json's "packageManager", and that field is the
+      # canonical pin everything else (corepack, the Dockerfiles) already follows.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -86,9 +87,10 @@ jobs:
       OTP_DEV_LOG: 'true'
     steps:
       - uses: actions/checkout@v4
+      # No `version:` here on purpose. pnpm/action-setup errors out when a version
+      # is given alongside package.json's "packageManager", and that field is the
+      # canonical pin everything else (corepack, the Dockerfiles) already follows.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 22
