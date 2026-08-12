@@ -27,6 +27,7 @@ import { CouponsModule } from './modules/coupons/coupons.module';
 import { SupportModule } from './modules/support/support.module';
 import { ConsentModule } from './modules/consent/consent.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -85,6 +86,7 @@ import { IdempotencyInterceptor } from './common/interceptors/idempotency.interc
     SupportModule,
     ConsentModule,
     RevenueModule,
+    AnalyticsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
