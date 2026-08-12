@@ -113,9 +113,19 @@ Design package (docs/) is complete; this tracks **implementation**.
       window. Booked as a separate revenue stream — deliberately not counted as GMV, since
       ad spend is not merchandise — verified 20/20
 
+## Phase 9 — Measurement (can we tell if it works?)
+- [x] Funnel report: the PRD's success metrics (docs/01 §7) computed from live operational
+      data — activation, liquidity, conversion, dispute rate, verified-party share, retention
+      proxy, plus the north star (dispute-free transactions/week). Derived from listings /
+      threads / orders / disputes, so no event pipeline and it works retroactively.
+      Percentages ship with their numerator+denominator, empty denominators report null rather
+      than a fake 0%, activation only counts cohorts that have had a full 7 days, and the one
+      metric that genuinely can't be computed is reported as such with the reason.
+      GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
+
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 11 black-box E2E suites (170 API checks); CI runs unit +
-      commerce/trust/notification-preferences/revenue/boosts/subscriptions E2E
+- [x] Test suites: 41 unit + 12 black-box E2E suites (192 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,

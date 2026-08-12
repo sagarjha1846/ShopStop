@@ -28,6 +28,24 @@ interface Dispute {
   status: string;
   order?: { id: string; totalMinor: number; currency: string } | null;
 }
+interface FunnelMetric {
+  key: string;
+  label: string;
+  value: number | null;
+  unit: 'pct' | 'count' | 'per100';
+  numerator: number;
+  denominator: number;
+  target: number | null;
+  targetDirection: 'gte' | 'lte';
+  meets: boolean | null;
+  note?: string;
+}
+interface Funnel {
+  windowDays: number;
+  northStarPerWeek: number | null;
+  metrics: FunnelMetric[];
+  notMeasurable: Array<{ metric: string; reason: string }>;
+}
 interface Revenue {
   currency: string;
   feeBps: number;
@@ -56,6 +74,7 @@ export default function AdminPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [revenue, setRevenue] = useState<Revenue | null>(null);
+  const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const loadQueue = useCallback(async () => {
@@ -79,7 +98,12 @@ export default function AdminPage() {
           // Revenue is the company's P&L — admins only, not moderators.
           if (me.role === 'ADMIN') {
             try {
-              setRevenue(await apiAuthed<Revenue>('/admin/revenue?days=30'));
+              const [rev, fun] = await Promise.all([
+                apiAuthed<Revenue>('/admin/revenue?days=30'),
+                apiAuthed<Funnel>('/admin/funnel?days=30'),
+              ]);
+              setRevenue(rev);
+              setFunnel(fun);
             } catch {
               /* ignore */
             }
@@ -121,6 +145,61 @@ export default function AdminPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Trust &amp; Safety console</h1>
       {msg && <p className="text-sm text-accent">{msg}</p>}
+
+      {funnel && (
+        <section className="rounded-lg border bg-surface p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-semibold">Is the marketplace working?</h2>
+            <span className="text-xs text-muted">last {funnel.windowDays} days</span>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            North star — dispute-free transactions per week:{' '}
+            <span className="font-semibold text-ink">{funnel.northStarPerWeek ?? '—'}</span>
+          </p>
+
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[32rem] text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="py-1 font-medium">Metric</th>
+                  <th className="py-1 text-right font-medium">Actual</th>
+                  <th className="py-1 text-right font-medium">Counts</th>
+                  <th className="py-1 text-right font-medium">Target</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {funnel.metrics.map((m) => (
+                  <tr key={m.key}>
+                    <td className="py-1">
+                      {m.label}
+                      {m.note && <span className="block text-xs text-muted">{m.note}</span>}
+                    </td>
+                    <td
+                      className={`py-1 text-right font-medium ${
+                        m.meets === null ? 'text-muted' : m.meets ? 'text-success' : 'text-danger'
+                      }`}
+                    >
+                      {m.value === null ? 'no data' : m.unit === 'pct' ? `${m.value}%` : m.value}
+                    </td>
+                    <td className="py-1 text-right text-xs text-muted">
+                      {m.unit === 'count' ? '—' : `${m.numerator}/${m.denominator}`}
+                    </td>
+                    <td className="py-1 text-right text-muted">
+                      {m.target === null ? '—' : `${m.targetDirection === 'gte' ? '≥' : '≤'}${m.target}${m.unit === 'pct' ? '%' : ''}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {funnel.notMeasurable.length > 0 && (
+            <p className="mt-3 text-xs text-muted">
+              Not measurable yet: {funnel.notMeasurable.map((x) => x.metric).join('; ')}.
+            </p>
+          )}
+        </section>
+      )}
 
       {revenue && (
         <section className="rounded-lg border bg-surface p-4">
