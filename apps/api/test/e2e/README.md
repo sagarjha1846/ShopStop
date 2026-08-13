@@ -20,6 +20,7 @@ node test/e2e/subscriptions.e2e.mjs  # paid seller plans: capability, never a tr
 node test/e2e/funnel.e2e.mjs     # the PRD's success metrics computed from live data
 node test/e2e/questions.e2e.mjs  # public listing Q&A: ask → answer → counts as liquidity
 node test/e2e/feature-flags.e2e.mjs  # switches that change behaviour, not just persist
+node test/e2e/read-receipts.e2e.mjs  # unread counts + read receipts, and inbox isolation
 # realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
 node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
@@ -65,6 +66,10 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   commission drops to zero and back, an order priced fee-free stays fee-free
   after re-enabling, the Q&A kill switch closes asking while leaving existing
   answers readable. Restores flags on exit, since they are global state.
+- **read-receipts**: per-thread unread counts (own messages never unread to you),
+  opening a thread clears them, a later message goes unread again, the
+  counterparty read position is exposed and does not advance on its own, and a
+  stranger neither sees the thread nor can read it (403).
 
 CI runs these against an ephemeral stack (see `.github/workflows/ci.yml`, extended
 in Phase 7). For a typed integration suite, these can be ported to Jest + supertest.

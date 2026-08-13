@@ -81,6 +81,11 @@ export class RealtimeGateway implements OnGatewayConnection {
     }
   }
 
+  /** Tell the room that someone caught up, so ticks flip live. */
+  emitThreadRead(threadId: string, userId: string, at: Date): void {
+    this.server?.to(`thread:${threadId}`).emit('thread:read', { threadId, userId, at: at.toISOString() });
+  }
+
   emitNotification(userId: string, notification: unknown): void {
     this.server?.to(`user:${userId}`).emit('notification:new', notification);
   }

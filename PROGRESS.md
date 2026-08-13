@@ -55,6 +55,9 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Reviews (verified-purchase) + reputation recompute
 - [x] Coupons: admin/seller creation + checkout discount (atomic redemption limit, release-on-cancel) — verified 6/6
 - [x] Messaging (threads, messages, structured offers accept/decline/counter)
+- [x] Read state (docs/03 §6): per-thread unread counts + read receipts + live `thread:read`
+      event. ThreadParticipant.lastReadAt had always been written and never read back, so the
+      data existed and was simply unexposed — verified 9/9
 - [x] Socket.IO realtime gateway (JWT handshake, participant-checked rooms, live delivery,
       Redis adapter for horizontal scale) + live web chat — verified 5/5
 
@@ -132,8 +135,8 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 14 black-box E2E suites (248 API checks); CI runs unit +
-      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags E2E
+- [x] Test suites: 41 unit + 15 black-box E2E suites (257 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
