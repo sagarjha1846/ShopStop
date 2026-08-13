@@ -38,6 +38,15 @@ export class RevenueController {
     return this.revenue.sellerEarnings(user.id);
   }
 
+  /**
+   * What the caller is owed and what has been paid to them. Scoped to the caller —
+   * never takes a seller id, since one seller's payout history is not another's.
+   */
+  @Get('me/payouts')
+  myPayouts(@CurrentUser() user: AuthUser) {
+    return this.payables.forSeller(user.id);
+  }
+
   /** Platform revenue. Admin-only: this is the company's P&L, not moderator data. */
   @Roles(UserRole.ADMIN)
   @Get('admin/revenue')

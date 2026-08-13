@@ -77,7 +77,10 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   different tables and two different sums, so agreement is evidence the books are
   consistent. Then settlement: admin-only, a transfer reference is mandatory, paying
   a seller moves exactly the releasable amount out of held and into PAYOUT, settling
-  twice pays nothing the second time, and six *concurrently* fired settlements with
+  twice pays nothing the second time, the seller's own view (`GET /me/payouts`)
+  agrees with the admin figure for them and is scoped to the caller — a different
+  account sees zeros, never someone else's payout history — and six *concurrently*
+  fired settlements with
   distinct idempotency keys pay the amount once rather than six times (verified
   against the inverse — with the row lock removed, three of six paid). Aging past the
   SLA is not exercised: all E2E data is minutes old, and backdating it would mean

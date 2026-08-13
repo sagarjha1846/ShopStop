@@ -100,6 +100,27 @@ const PAYABLE_ORDERS = Prisma.sql`
     AND (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) > 0
 `;
 
+export interface SellerSettlementView {
+  currency: string;
+  settlementSlaDays: number;
+  /** Owed to this seller and not yet paid. */
+  heldMinor: number;
+  /** Delivered and dispute-free — payable now. */
+  releasableMinor: number;
+  /** In transit or disputed — not yet payable. */
+  withheldMinor: number;
+  /** Lifetime settled to this seller. */
+  paidOutMinor: number;
+  oldestHeldDays: number;
+  payouts: Array<{
+    batchId: string | null;
+    reference: string | null;
+    amountMinor: number;
+    orders: number;
+    paidAt: string;
+  }>;
+}
+
 export interface SettlementResult {
   batchId: string;
   sellerId: string;
@@ -117,6 +138,72 @@ export class PayablesService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
   ) {}
+
+  /**
+   * The same liability, from the seller's side.
+   *
+   * "When do I get paid" is the question a seller actually has, and until
+   * settlement existed there was no honest way to answer it. Scoped to the caller
+   * — this never takes a seller id, because one seller's payout history is not
+   * another's business.
+   */
+  async forSeller(sellerId: string): Promise<SellerSettlementView> {
+    const [totals, payouts, lifetime] = await Promise.all([
+      this.prisma.$queryRaw<
+        Array<{ held: bigint | null; releasable: bigint | null; oldest_days: number | null }>
+      >`
+        WITH payable AS (${PAYABLE_ORDERS})
+        SELECT COALESCE(SUM(owed_minor), 0)                           AS held,
+               COALESCE(SUM(owed_minor) FILTER (WHERE releasable), 0) AS releasable,
+               MAX(EXTRACT(EPOCH FROM (now() - captured_at)) / 86400)::float8 AS oldest_days
+        FROM payable WHERE seller_id = ${sellerId}
+      `,
+      // Grouped by settlement batch so a seller sees transfers, not per-order rows.
+      this.prisma.$queryRaw<
+        Array<{ batch: string | null; reference: string | null; total: bigint; orders: bigint; paid_at: Date }>
+      >`
+        SELECT meta->>'batch' AS batch,
+               provider_ref   AS reference,
+               COALESCE(SUM(amount_minor), 0) AS total,
+               COUNT(*)                       AS orders,
+               MIN(created_at)                AS paid_at
+        FROM transactions
+        WHERE type = 'PAYOUT' AND user_id = ${sellerId}
+        GROUP BY 1, 2
+        ORDER BY 5 DESC
+        LIMIT 20
+      `,
+      // Lifetime total is its own aggregate, not a sum of the list above: that one
+      // is capped at 20 batches, and a seller past their twentieth payout would
+      // otherwise be shown less than they have actually been paid.
+      this.prisma.$queryRaw<Array<{ total: bigint }>>`
+        SELECT COALESCE(SUM(amount_minor), 0) AS total
+        FROM transactions
+        WHERE type = 'PAYOUT' AND user_id = ${sellerId}
+      `,
+    ]);
+
+    const t = totals[0];
+    const heldMinor = Number(t?.held ?? 0);
+    const releasableMinor = Number(t?.releasable ?? 0);
+
+    return {
+      currency: 'INR',
+      settlementSlaDays: SETTLEMENT_SLA_DAYS,
+      heldMinor,
+      releasableMinor,
+      withheldMinor: heldMinor - releasableMinor,
+      paidOutMinor: Number(lifetime[0]?.total ?? 0),
+      oldestHeldDays: t?.oldest_days != null ? Number(t.oldest_days.toFixed(1)) : 0,
+      payouts: payouts.map((p) => ({
+        batchId: p.batch,
+        reference: p.reference,
+        amountMinor: Number(p.total),
+        orders: Number(p.orders),
+        paidAt: p.paid_at.toISOString(),
+      })),
+    };
+  }
 
   /**
    * Record a settlement to a seller.

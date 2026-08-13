@@ -145,7 +145,14 @@ Design package (docs/) is complete; this tracks **implementation**.
       `SELECT … FOR UPDATE` on the candidate orders rather than a status read, since paying a
       seller twice is not recoverable: proved by removing the lock, where 3 of 6 concurrent
       settlements paid (₹26,460 sent for ₹8,820 of sales) and the reconciliation independently
-      caught it as drift — verified 47/47
+      caught it as drift
+- [x] Seller payout view (`GET /me/payouts`): "when do I get paid" is the question a seller
+      actually has, and there was no honest way to answer it until settlement existed. Shows
+      held / releasable / withheld, lifetime paid, and payout history grouped by settlement
+      batch with the transfer reference. Scoped to the caller — never takes a seller id, and
+      the E2E asserts a second account sees zeros rather than someone else's history. Lifetime
+      paid is its own aggregate rather than a sum of the 20-row history, so a seller past their
+      twentieth payout is not shown less than they were paid — verified 55/55
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
@@ -163,7 +170,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 17 black-box E2E suites (320 API checks); CI runs unit +
+- [x] Test suites: 41 unit + 17 black-box E2E suites (328 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify/payables E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live

@@ -156,7 +156,21 @@ ok('withheld money is not settled', postSettle.withheldMinor === preSettle.withh
 const settleAgain = await j('POST', '/admin/payables/settle', { token: admin, key: `s5-${RUN}`, body: { sellerId: meId, reference: `UTR-${RUN}-2` } });
 ok('settling again pays nothing', settleAgain.data.settledMinor === 0, `paid=${settleAgain.data?.settledMinor}`);
 
-// --- 10. concurrent settlements cannot pay twice ------------------------------
+// --- 10. the seller can see what they are owed and what was paid --------------
+const noAuth = await j('GET', '/me/payouts');
+ok('the payout view requires auth', noAuth.status === 401, `status=${noAuth.status}`);
+const sellerView = (await j('GET', '/me/payouts', { token: admin })).data;
+ok('the seller sees what is held for them', sellerView.heldMinor === (postSettle.bySeller.find((s) => s.sellerId === meId)?.owedMinor ?? 0), `seller=${sellerView.heldMinor} admin=${postSettle.bySeller.find((s) => s.sellerId === meId)?.owedMinor}`);
+ok('held splits into releasable + withheld', sellerView.releasableMinor + sellerView.withheldMinor === sellerView.heldMinor, `${sellerView.releasableMinor}+${sellerView.withheldMinor} vs ${sellerView.heldMinor}`);
+ok('the settlement just made is visible to the seller', sellerView.payouts.some((p) => p.reference === `UTR-${RUN}` && p.amountMinor === settled.data.settledMinor), `refs=${sellerView.payouts.slice(0, 3).map((p) => p.reference)}`);
+ok('lifetime paid out covers that settlement', sellerView.paidOutMinor >= settled.data.settledMinor, `paidOut=${sellerView.paidOutMinor} settled=${settled.data.settledMinor}`);
+ok('the seller is told the settlement SLA', sellerView.settlementSlaDays > 0, `sla=${sellerView.settlementSlaDays}`);
+// One seller's payout history is not another's business.
+const strangerView = (await j('GET', '/me/payouts', { token: buyer })).data;
+ok('a different account sees only its own payouts', strangerView.paidOutMinor === 0 && strangerView.payouts.length === 0, `paidOut=${strangerView.paidOutMinor} rows=${strangerView.payouts.length}`);
+ok('and is owed nothing', strangerView.heldMinor === 0, `held=${strangerView.heldMinor}`);
+
+// --- 11. concurrent settlements cannot pay twice ------------------------------
 // Distinct idempotency keys on purpose: the interceptor would mask a missing lock,
 // and paying a seller twice is not recoverable by an apology.
 const orderC = await placeOrder('c', 1100000);
@@ -177,7 +191,7 @@ ok('six concurrent settlements pay the amount once, not six times', claimed === 
 ok('the ledger records exactly one payment', postRace.reconciliation.paidOutMinor - preRace.reconciliation.paidOutMinor === preRace.releasableMinor, `delta=${postRace.reconciliation.paidOutMinor - preRace.reconciliation.paidOutMinor} expected=${preRace.releasableMinor}`);
 ok('the books balance after the race', postRace.reconciliation.balanced, `drift=${postRace.reconciliation.driftMinor}`);
 
-// --- 11. the float dwarfs the revenue, and the report says so -----------------
+// --- 12. the float dwarfs the revenue, and the report says so -----------------
 // Not a pass/fail on the ratio itself — the point is that both numbers are now
 // knowable from the API, which is what the liability finding required.
 const rev = (await j("GET", "/admin/revenue?days=365", { token: admin })).data;
