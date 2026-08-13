@@ -74,72 +74,114 @@ export class DisputesService {
     status: DisputeStatus,
     resolution: string,
     ip?: string,
+    refundAmountMinor?: number,
   ): Promise<Dispute> {
-    const dispute = await this.prisma.dispute.findUnique({ where: { id: disputeId } });
+    const dispute = await this.prisma.dispute.findUnique({
+      where: { id: disputeId },
+      include: { order: { select: { totalMinor: true } } },
+    });
     if (!dispute) throw AppError.notFound('Dispute');
     if (dispute.status.startsWith('RESOLVED') || dispute.status === DisputeStatus.REJECTED) {
       throw AppError.illegalState('Dispute is already resolved');
     }
 
-    const updated = await this.prisma.dispute.update({
-      where: { id: disputeId },
+    // A partial resolution with no amount used to close the dispute and move no
+    // money at all: the buyer got nothing while the record said they were repaid.
+    if (status === DisputeStatus.RESOLVED_PARTIAL) {
+      if (refundAmountMinor === undefined) {
+        throw AppError.validation('A partial refund needs refundAmountMinor');
+      }
+      if (refundAmountMinor <= 0 || refundAmountMinor >= dispute.order.totalMinor) {
+        throw AppError.validation(
+          `refundAmountMinor must be between 1 and ${dispute.order.totalMinor - 1}; use RESOLVED_REFUND for the full amount`,
+        );
+      }
+    } else if (refundAmountMinor !== undefined) {
+      // An amount on a release or a full refund is a mistake, not a nuance.
+      throw AppError.validation(`refundAmountMinor does not apply to ${status}`);
+    }
+
+    // Compare-and-set: two admins resolving the same dispute at once would both
+    // pass the read above and both book a refund.
+    const claimed = await this.prisma.dispute.updateMany({
+      where: { id: disputeId, status: { in: [DisputeStatus.OPEN, DisputeStatus.EVIDENCE] } },
       data: { status, resolution, resolvedAt: new Date() },
     });
+    if (claimed.count === 0) throw AppError.illegalState('Dispute is already resolved');
 
     if (status === DisputeStatus.RESOLVED_REFUND) await this.bookRefund(dispute.orderId);
+    if (status === DisputeStatus.RESOLVED_PARTIAL) await this.bookRefund(dispute.orderId, refundAmountMinor);
+
     await this.audit.record({
       actorId: adminId,
       action: `dispute.${status.toLowerCase()}`,
       targetType: 'DISPUTE',
       targetId: disputeId,
       ip,
-      meta: { resolution },
+      meta: { resolution, ...(refundAmountMinor !== undefined ? { refundAmountMinor } : {}) },
     });
-    return updated;
+    return this.prisma.dispute.findUniqueOrThrow({ where: { id: disputeId } });
   }
 
   /**
-   * Move a refunded order to REFUNDED and record the money coming back out.
+   * Record money going back to the buyer.
    *
    * Two ledger rows, not one. The REFUND row is the outflow to the buyer. The
    * negative FEE row is a contra entry that backs out the commission: the
    * platform does not keep its cut of a sale that was refunded, and without the
    * reversal `SUM(FEE)` would report revenue the business never actually earned.
    *
-   * Compare-and-set on the status so a second resolution attempt cannot book the
-   * refund twice.
+   * `amountMinor` omitted means a full refund, which also moves the order to
+   * REFUNDED. A partial refund leaves the order where it is — the buyer keeps the
+   * item and the seller keeps the rest — and reverses the commission in the same
+   * proportion, so the platform and the seller share the cost of the goodwill
+   * rather than the seller carrying all of it.
+   *
+   * Compare-and-set on the status so a second resolution attempt cannot book a
+   * full refund twice; partial refunds are guarded by the dispute claim in
+   * `resolve()`, which is what stops the same dispute being resolved twice.
    */
-  private async bookRefund(orderId: string): Promise<void> {
+  private async bookRefund(orderId: string, amountMinor?: number): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: { totalMinor: true, feeMinor: true, currency: true, sellerId: true },
     });
     if (!order) return;
 
+    const partial = amountMinor !== undefined;
+    const refundMinor = amountMinor ?? order.totalMinor;
+    // Proportional, and rounded once: the platform gives back the same share of
+    // its commission as the buyer is getting back of their payment.
+    const feeReversalMinor = partial
+      ? Math.round((order.feeMinor * refundMinor) / order.totalMinor)
+      : order.feeMinor;
+
     await this.prisma.$transaction(async (tx) => {
-      const claimed = await tx.order.updateMany({
-        where: { id: orderId, status: { not: OrderStatus.REFUNDED } },
-        data: { status: OrderStatus.REFUNDED },
-      });
-      if (claimed.count === 0) return;
+      if (!partial) {
+        const claimed = await tx.order.updateMany({
+          where: { id: orderId, status: { not: OrderStatus.REFUNDED } },
+          data: { status: OrderStatus.REFUNDED },
+        });
+        if (claimed.count === 0) return;
+      }
 
       await tx.transaction.create({
         data: {
           orderId,
           type: TransactionType.REFUND,
-          amountMinor: order.totalMinor,
+          amountMinor: refundMinor,
           currency: order.currency,
-          meta: { basis: 'order.refund' },
+          meta: { basis: partial ? 'order.refund.partial' : 'order.refund' },
         },
       });
 
-      if (order.feeMinor > 0) {
+      if (feeReversalMinor > 0) {
         await tx.transaction.create({
           data: {
             orderId,
             userId: order.sellerId,
             type: TransactionType.FEE,
-            amountMinor: -order.feeMinor,
+            amountMinor: -feeReversalMinor,
             currency: order.currency,
             meta: { basis: 'order.commission.reversal' },
           },

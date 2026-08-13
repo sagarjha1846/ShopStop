@@ -84,7 +84,12 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   distinct idempotency keys pay the amount once rather than six times (verified
   against the inverse — with the row lock removed, three of six paid). Aging past the
   SLA is not exercised: all E2E data is minutes old, and backdating it would mean
-  writing to the DB behind the API these suites test.
+  writing to the DB behind the API these suites test. Finally partial refunds:
+  RESOLVED_PARTIAL used to close a dispute and move no money at all, so the suite
+  pins that the buyer is actually refunded, the commission is reversed in
+  proportion, the seller's debt drops by the refund net of that reversal, the order
+  is not marked REFUNDED, the remainder becomes payable once the dispute closes,
+  a second resolution is refused, and the reconciliation still balances throughout.
 - **payment-verify**: the browser callback half of checkout — a forged signature is
   rejected as a client error (422, never a 5xx that invites a retry) and leaves the
   order PENDING, confirmation requires auth and order ownership (a valid signature

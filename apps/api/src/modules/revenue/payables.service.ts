@@ -39,7 +39,7 @@ export interface Reconciliation {
   paidOutMinor: number;
   /** collected − commission − refunded − paid out. */
   ledgerHeldMinor: number;
-  /** Σ (total − fee − paid out) over captured, unrefunded orders. */
+  /** Σ (proceeds − net refunds − payouts) over captured orders. */
   orderHeldMinor: number;
   driftMinor: number;
   balanced: boolean;
@@ -66,6 +66,41 @@ export interface PayablesReport {
 }
 
 /**
+ * Dispute states that no longer block a payout. Enumerated rather than written as
+ * "not OPEN/EVIDENCE" so the default stays withhold: a dispute state added later
+ * blocks settlement until someone decides it shouldn't, which is the safe way round.
+ * RESOLVED_PARTIAL belongs here — the refund is booked and the remainder is the
+ * seller's, so leaving it out would withhold their money forever.
+ */
+const SETTLED_DISPUTES = ['RESOLVED_RELEASE', 'RESOLVED_PARTIAL', 'RESOLVED_REFUND', 'REJECTED'];
+
+/**
+ * What the seller is still owed on one order: their proceeds, less any refund the
+ * buyer got back (net of the commission handed back with it), less anything
+ * already settled.
+ *
+ * Refunds are netted rather than filtered on order status. A partial refund leaves
+ * the order DELIVERED, so excluding only REFUNDED orders would keep showing the
+ * seller owed money that has already gone back to the buyer — and settlement would
+ * pay it out. Netting also makes a full refund fall out arithmetically (owed
+ * reaches zero), so no status special-case is needed.
+ */
+const OWED_MINOR = Prisma.sql`
+  (o.total_minor - o.fee_minor) - (t2.refunded - t2.fee_reversed) - t2.paid
+`;
+
+/** Per-order money movements the orders table does not itself record. */
+const ORDER_LEDGER = Prisma.sql`
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(amount_minor) FILTER (WHERE type = 'PAYOUT'), 0) AS paid,
+           COALESCE(SUM(amount_minor) FILTER (WHERE type = 'REFUND'), 0) AS refunded,
+           -- Commission handed back with a refund; it is not the seller's to lose.
+           COALESCE(SUM(-amount_minor) FILTER (WHERE type = 'FEE' AND amount_minor < 0), 0) AS fee_reversed
+    FROM transactions WHERE order_id = o.id
+  ) t2 ON TRUE
+`;
+
+/**
  * Rows for every order whose money the platform is currently holding.
  *
  * A marketplace that collects the buyer's full payment owes the seller everything
@@ -73,16 +108,15 @@ export interface PayablesReport {
  * the largest number on the balance sheet and nothing in the system stated it, so
  * neither the float nor the liability could be quantified.
  *
- * Money is releasable only once the buyer has the goods and no dispute is open;
- * anything else is withheld. The default is to withhold, so a status this query
- * does not know about can never be mistaken for payable.
+ * Money is releasable only once the buyer has the goods and the dispute (if any) is
+ * closed; anything else is withheld.
  */
 const PAYABLE_ORDERS = Prisma.sql`
   SELECT o.id,
          o.seller_id,
-         (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) AS owed_minor,
+         ${OWED_MINOR} AS owed_minor,
          c.captured_at,
-         (o.status = 'DELIVERED' AND (d.status IS NULL OR d.status = 'RESOLVED_RELEASE')) AS releasable
+         (o.status = 'DELIVERED' AND (d.status IS NULL OR d.status::text IN (${Prisma.join(SETTLED_DISPUTES)}))) AS releasable
   FROM orders o
   JOIN payments p ON p.order_id = o.id AND p.status = 'CAPTURED'
   -- Capture time from the ledger, not payments.updated_at: the CHARGE row is
@@ -92,12 +126,8 @@ const PAYABLE_ORDERS = Prisma.sql`
     WHERE order_id = o.id AND type = 'CHARGE'
   ) c ON c.captured_at IS NOT NULL
   LEFT JOIN disputes d ON d.order_id = o.id
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(SUM(amount_minor), 0) AS paid FROM transactions
-    WHERE order_id = o.id AND type = 'PAYOUT'
-  ) po ON TRUE
-  WHERE o.status <> 'REFUNDED'
-    AND (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) > 0
+  ${ORDER_LEDGER}
+  WHERE ${OWED_MINOR} > 0
 `;
 
 export interface SellerSettlementView {
@@ -238,23 +268,21 @@ export class PayablesService {
         LEFT JOIN disputes d ON d.order_id = o.id
         WHERE o.seller_id = ${sellerId}
           AND o.status = 'DELIVERED'
-          AND (d.status IS NULL OR d.status = 'RESOLVED_RELEASE')
+          AND (d.status IS NULL OR d.status::text IN (${Prisma.join(SETTLED_DISPUTES)}))
         FOR UPDATE OF o
       `;
       if (locked.length === 0) return { settledMinor: 0, orders: [] as Array<{ orderId: string; amountMinor: number }> };
 
       const ids = locked.map((r) => r.id);
+      // Same arithmetic as the report, refunds included: paying out the full
+      // proceeds of a partially refunded order would send the buyer's money back
+      // out to the seller.
       const owed = await tx.$queryRaw<Array<{ id: string; owed_minor: bigint; currency: string }>>`
-        SELECT o.id,
-               (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) AS owed_minor,
-               o.currency
+        SELECT o.id, ${OWED_MINOR} AS owed_minor, o.currency
         FROM orders o
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(SUM(amount_minor), 0) AS paid FROM transactions
-          WHERE order_id = o.id AND type = 'PAYOUT'
-        ) po ON TRUE
+        ${ORDER_LEDGER}
         WHERE o.id IN (${Prisma.join(ids)})
-          AND (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) > 0
+          AND ${OWED_MINOR} > 0
       `;
       if (owed.length === 0) return { settledMinor: 0, orders: [] as Array<{ orderId: string; amountMinor: number }> };
 

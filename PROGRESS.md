@@ -163,6 +163,19 @@ Design package (docs/) is complete; this tracks **implementation**.
       captured-sale net "Paid out to you", which told sellers they had money that had never
       been sent; it now reads "Earned (after fees)" with actual payouts in their own panel.
       Verified in Chromium against the live API — both panels render real figures
+- [x] Fixed silent money loss on partial refunds: `RESOLVED_PARTIAL` was a selectable
+      dispute outcome that moved **zero money**. Resolve took no amount, only
+      `RESOLVED_REFUND` booked anything, so the dispute closed, the audit chain recorded a
+      partial refund, and the buyer received nothing while the seller kept the full amount
+      and the platform kept its full commission. Measured before the fix: Δrefunded=0,
+      Δfee=0, Δheld=0 on a 201 response. Now `refundAmountMinor` is required for PARTIAL
+      (and rejected for other outcomes), the REFUND row is written for the amount, and the
+      commission is reversed *in proportion* so the platform and the seller share the
+      goodwill rather than the seller carrying it. Payables now nets refunds per order
+      instead of filtering on `status = REFUNDED`, since a partial refund leaves the order
+      DELIVERED — without that the seller would still have been shown owed the full amount
+      and settlement would have paid it out. Also closed a read-then-write race in
+      `resolve()` that let two admins book a refund on the same dispute — verified 66/66
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
@@ -180,7 +193,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 17 black-box E2E suites (328 API checks); CI runs unit +
+- [x] Test suites: 41 unit + 17 black-box E2E suites (339 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify/payables E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live

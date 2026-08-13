@@ -191,7 +191,49 @@ ok('six concurrent settlements pay the amount once, not six times', claimed === 
 ok('the ledger records exactly one payment', postRace.reconciliation.paidOutMinor - preRace.reconciliation.paidOutMinor === preRace.releasableMinor, `delta=${postRace.reconciliation.paidOutMinor - preRace.reconciliation.paidOutMinor} expected=${preRace.releasableMinor}`);
 ok('the books balance after the race', postRace.reconciliation.balanced, `drift=${postRace.reconciliation.driftMinor}`);
 
-// --- 12. the float dwarfs the revenue, and the report says so -----------------
+// --- 12. a partial refund actually moves money --------------------------------
+// RESOLVED_PARTIAL used to close the dispute and move nothing: the record said the
+// buyer was repaid while they received nothing and the seller kept the lot.
+const orderD = await placeOrder('d', 1000000);
+await capture(orderD, 'd');
+await j('POST', `/orders/${orderD.id}/transition`, { token: admin, body: { action: 'pack' } });
+await j('POST', `/orders/${orderD.id}/transition`, { token: admin, body: { action: 'ship', trackingNote: 'BlueDart 4' } });
+await j('POST', `/orders/${orderD.id}/transition`, { token: buyer, body: { action: 'deliver' } });
+await j('POST', '/disputes', { token: buyer, body: { orderId: orderD.id, reason: 'Item is scratched, would accept a partial refund instead of returning' } });
+const dispD = (await j('GET', '/admin/disputes', { token: admin })).data.find((d) => d.orderId === orderD.id);
+
+const noAmount = await j('POST', `/admin/disputes/${dispD.id}/resolve`, { token: admin, body: { status: 'RESOLVED_PARTIAL', resolution: 'partial' } });
+ok('a partial refund without an amount is rejected', noAmount.status === 422, `status=${noAmount.status}`);
+const tooBig = await j('POST', `/admin/disputes/${dispD.id}/resolve`, { token: admin, body: { status: 'RESOLVED_PARTIAL', resolution: 'partial', refundAmountMinor: orderD.totalMinor } });
+ok('a partial refund for the full amount is rejected', tooBig.status === 422, `status=${tooBig.status}`);
+const amountOnRelease = await j('POST', `/admin/disputes/${dispD.id}/resolve`, { token: admin, body: { status: 'RESOLVED_RELEASE', resolution: 'release', refundAmountMinor: 1000 } });
+ok('an amount on a release is rejected as a mistake', amountOnRelease.status === 422, `status=${amountOnRelease.status}`);
+
+const REFUND = 300000;
+const feeReversal = Math.round((orderD.feeMinor * REFUND) / orderD.totalMinor);
+const revBeforePartial = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+const payBeforePartial = await payables();
+const partial = await j('POST', `/admin/disputes/${dispD.id}/resolve`, { token: admin, body: { status: 'RESOLVED_PARTIAL', resolution: 'Agreed 30% back for the scratch', refundAmountMinor: REFUND } });
+ok('partial resolution accepted', partial.status === 200 || partial.status === 201, `status=${partial.status}`);
+
+const revAfterPartial = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+ok('the buyer is actually refunded', revAfterPartial.refundedMinor - revBeforePartial.refundedMinor === REFUND, `delta=${revAfterPartial.refundedMinor - revBeforePartial.refundedMinor} expected=${REFUND}`);
+// The platform gives back the same share of its commission as the buyer gets back
+// of their payment, rather than making the seller carry all of the goodwill.
+ok('commission is reversed in proportion', revBeforePartial.feeRevenueMinor - revAfterPartial.feeRevenueMinor === feeReversal, `delta=${revBeforePartial.feeRevenueMinor - revAfterPartial.feeRevenueMinor} expected=${feeReversal}`);
+
+const payAfterPartial = await payables();
+ok('the seller is owed the refund less the reversed commission', payBeforePartial.heldMinor - payAfterPartial.heldMinor === REFUND - feeReversal, `delta=${payBeforePartial.heldMinor - payAfterPartial.heldMinor} expected=${REFUND - feeReversal}`);
+ok('the books still balance after a partial refund', payAfterPartial.reconciliation.balanced, `drift=${payAfterPartial.reconciliation.driftMinor}`);
+const orderDAfter = (await j('GET', `/orders/${orderD.id}`, { token: buyer })).data;
+ok('a partially refunded order is not marked REFUNDED', orderDAfter.status === 'DELIVERED', `status=${orderDAfter.status}`);
+// The dispute is closed, so the seller's remainder must become payable — not sit
+// withheld forever because the resolution was "partial" rather than "release".
+ok('the remainder becomes payable once the dispute closes', payAfterPartial.releasableMinor > payBeforePartial.releasableMinor - REFUND, `before=${payBeforePartial.releasableMinor} after=${payAfterPartial.releasableMinor}`);
+const reResolve = await j('POST', `/admin/disputes/${dispD.id}/resolve`, { token: admin, body: { status: 'RESOLVED_PARTIAL', resolution: 'again', refundAmountMinor: REFUND } });
+ok('a resolved dispute cannot be refunded again', reResolve.status === 409 || reResolve.status === 422, `status=${reResolve.status}`);
+
+// --- 13. the float dwarfs the revenue, and the report says so -----------------
 // Not a pass/fail on the ratio itself — the point is that both numbers are now
 // knowable from the API, which is what the liability finding required.
 const rev = (await j("GET", "/admin/revenue?days=365", { token: admin })).data;

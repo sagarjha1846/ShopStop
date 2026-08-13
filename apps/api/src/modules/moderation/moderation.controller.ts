@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { DisputeStatus, ReportSubject, UserRole } from '@prisma/client';
-import { IsArray, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { ModerationService } from './moderation.service';
 import { DisputesService } from './disputes.service';
 import { CreateReportDto, ModerationActionDto } from './dto/moderation.dto';
@@ -31,6 +31,12 @@ class ResolveDisputeDto {
   @IsString()
   @MaxLength(1000)
   resolution!: string;
+
+  /** Required for RESOLVED_PARTIAL, rejected for anything else. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  refundAmountMinor?: number;
 }
 
 @ApiTags('Trust & Safety')
@@ -102,6 +108,6 @@ export class ModerationController {
     @Body() dto: ResolveDisputeDto,
     @Req() req: Request,
   ) {
-    return this.disputes.resolve(user.id, id, dto.status, dto.resolution, req.ip);
+    return this.disputes.resolve(user.id, id, dto.status, dto.resolution, req.ip, dto.refundAmountMinor);
   }
 }
