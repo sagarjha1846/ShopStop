@@ -175,7 +175,22 @@ Design package (docs/) is complete; this tracks **implementation**.
       instead of filtering on `status = REFUNDED`, since a partial refund leaves the order
       DELIVERED — without that the seller would still have been shown owed the full amount
       and settlement would have paid it out. Also closed a read-then-write race in
-      `resolve()` that let two admins book a refund on the same dispute — verified 66/66
+      `resolve()` that let two admins book a refund on the same dispute
+- [x] Refunds actually reach the gateway. `bookRefund` wrote REFUND + contra-FEE rows and
+      called no payment API at all — the provider port had no `refund()` and none of the
+      adapters implemented one. The books asserted money had gone back to the buyer while
+      the buyer's card was never touched, which in production is a chargeback (and, at
+      volume, a terminated gateway account). Added `refund()` to the port with the same
+      dev-mode fallback `createIntent` uses, Razorpay's `POST /payments/:id/refund` behind
+      it keyed on the dispute id so a retry cannot refund twice at the gateway, and
+      `PaymentsService.refundToBuyer()` as the entry point. Ordering is deliberate: the
+      gateway call happens *before* the ledger write, and if it fails the dispute is handed
+      back to OPEN so an admin can retry — a REFUND row for a transfer that never happened
+      is worse than a failed resolution. REFUND rows now carry the gateway's refund id.
+      Verified against a real limitation rather than a mock: Cashfree implements no refund,
+      and resolving one of its orders returns 409, books nothing, and leaves the dispute in
+      the queue. Known gap: Cashfree refunds are unimplemented — deliberately refused
+      loudly rather than silently doing nothing — verified 72/72
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
@@ -193,7 +208,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 17 black-box E2E suites (339 API checks); CI runs unit +
+- [x] Test suites: 41 unit + 17 black-box E2E suites (345 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify/payables E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live

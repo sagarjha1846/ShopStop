@@ -142,6 +142,45 @@ export class PaymentsService {
   }
 
   /**
+   * Send money back to the buyer through the gateway that took it.
+   *
+   * Deliberately does not touch the ledger: the caller books the refund only
+   * after this resolves, so a REFUND row can never describe a transfer the
+   * gateway refused. Throws if the payment was never captured, if the provider
+   * has no refund support, or if the gateway rejects.
+   */
+  async refundToBuyer(
+    orderId: string,
+    amountMinor: number,
+    reference: string,
+  ): Promise<{ providerRefundId: string }> {
+    const payment = await this.prisma.payment.findUnique({ where: { orderId } });
+    if (!payment) throw AppError.notFound('Payment');
+    if (payment.status !== PaymentStatus.CAPTURED) {
+      throw AppError.illegalState('Only a captured payment can be refunded');
+    }
+    if (!payment.providerPaymentId) {
+      throw AppError.illegalState('Payment has no gateway payment id to refund against');
+    }
+    if (amountMinor <= 0 || amountMinor > payment.amountMinor) {
+      throw AppError.validation('Refund amount is outside what was charged');
+    }
+
+    const provider = this.providerOrThrow(payment.provider);
+    if (!provider.refund) {
+      // Refusing loudly beats booking a refund the buyer will never receive.
+      throw AppError.illegalState(`${payment.provider} cannot process refunds`);
+    }
+    const { providerRefundId } = await provider.refund({
+      providerPaymentId: payment.providerPaymentId,
+      amountMinor,
+      reference,
+    });
+    this.logger.log(`Refunded ${amountMinor} for order ${orderId} (${providerRefundId})`);
+    return { providerRefundId };
+  }
+
+  /**
    * Gateway webhook entry point. Verifies signature, is idempotent (a captured
    * payment reprocessed is a no-op), records a ledger Transaction, and advances the
    * order to ACCEPTED. Heavy follow-on work (receipts, payouts) is enqueued in Phase 4+.

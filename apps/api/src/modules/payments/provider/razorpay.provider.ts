@@ -8,6 +8,8 @@ import type {
   CreateIntentInput,
   CreateIntentResult,
   IPaymentProvider,
+  RefundInput,
+  RefundResult,
   WebhookEvent,
   WebhookHeaders,
 } from './payment-provider';
@@ -78,6 +80,42 @@ export class RazorpayProvider implements IPaymentProvider {
     const a = Buffer.from(expected);
     const b = Buffer.from(cb.signature ?? '');
     return a.length === b.length && timingSafeEqual(a, b);
+  }
+
+  /**
+   * Refund a captured payment. Razorpay takes the amount in minor units and
+   * accepts a partial figure, so the same call serves both refund kinds.
+   *
+   * Mirrors createIntent's dev behaviour: with placeholder keys it returns a
+   * synthetic refund id rather than calling out, so the dispute → refund → ledger
+   * path is exercisable locally. It never returns success for a live call that
+   * failed — the caller relies on a throw to avoid booking a refund that did not
+   * happen.
+   */
+  async refund(input: RefundInput): Promise<RefundResult> {
+    if (!this.configured) {
+      return { providerRefundId: `rfnd_dev_${input.reference.slice(-16)}` };
+    }
+    const auth = Buffer.from(
+      `${this.config.get('RAZORPAY_KEY_ID')}:${this.config.get('RAZORPAY_KEY_SECRET')}`,
+    ).toString('base64');
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${input.providerPaymentId}/refund`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/json',
+        // Razorpay dedupes retries on this header, so a retried resolution cannot
+        // refund the buyer twice at the gateway.
+        'X-Payment-Idempotency': input.reference,
+      },
+      body: JSON.stringify({ amount: input.amountMinor, notes: { reference: input.reference } }),
+    });
+    if (!res.ok) {
+      this.logger.error(`Razorpay refund failed for ${input.providerPaymentId}: ${res.status}`);
+      throw new AppError('PAYMENT_ERROR', 'Gateway refused the refund');
+    }
+    const data = (await res.json()) as { id: string };
+    return { providerRefundId: data.id };
   }
 
   verifyAndParseWebhook(rawBody: Buffer, headers: WebhookHeaders): WebhookEvent {

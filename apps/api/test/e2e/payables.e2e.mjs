@@ -233,7 +233,38 @@ ok('the remainder becomes payable once the dispute closes', payAfterPartial.rele
 const reResolve = await j('POST', `/admin/disputes/${dispD.id}/resolve`, { token: admin, body: { status: 'RESOLVED_PARTIAL', resolution: 'again', refundAmountMinor: REFUND } });
 ok('a resolved dispute cannot be refunded again', reResolve.status === 409 || reResolve.status === 422, `status=${reResolve.status}`);
 
-// --- 13. the float dwarfs the revenue, and the report says so -----------------
+// --- 13. a refund the gateway refuses books nothing ---------------------------
+// The ledger used to claim refunds that never left the building: bookRefund wrote
+// REFUND rows and no gateway was ever called. Now the call comes first, and a
+// provider that cannot refund has to fail loudly. Cashfree implements no refund(),
+// so this exercises a real provider limitation rather than a mock.
+const CF_SECRET = 'whsec_xxxxxxxx'; // dev: Cashfree falls back to the Razorpay webhook secret
+const orderE = await placeOrder('e', 700000);
+const cfIntent = (await j('POST', '/payments/intent', { token: buyer, key: `pcf-${RUN}`, body: { orderId: orderE.id, provider: 'CASHFREE' } })).data;
+const cfEvt = { type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: cfIntent.providerOrderId }, payment: { cf_payment_id: `cf_${RUN}`, payment_amount: orderE.totalMinor / 100, payment_status: 'SUCCESS', payment_group: 'upi' } } };
+const cfRaw = JSON.stringify(cfEvt);
+const cfTs = Date.now().toString();
+await fetch(`${B}/payments/webhook/cashfree`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-webhook-signature': createHmac('sha256', CF_SECRET).update(cfTs + cfRaw).digest('base64'), 'x-webhook-timestamp': cfTs }, body: cfRaw });
+const cfPaid = (await j('GET', `/orders/${orderE.id}`, { token: buyer })).data;
+ok('cashfree order captured', cfPaid.payment?.status === 'CAPTURED', `pay=${cfPaid.payment?.status}`);
+
+await j('POST', '/disputes', { token: buyer, body: { orderId: orderE.id, reason: 'Never arrived, requesting a full refund please' } });
+const dispE = (await j('GET', '/admin/disputes', { token: admin })).data.find((d) => d.orderId === orderE.id);
+const revBeforeFail = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+const refused = await j('POST', `/admin/disputes/${dispE.id}/resolve`, { token: admin, body: { status: 'RESOLVED_REFUND', resolution: 'Full refund' } });
+ok('a provider that cannot refund fails the resolution', refused.status >= 400, `status=${refused.status}`);
+const revAfterFail = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+ok('no refund is booked when the gateway refuses', revAfterFail.refundedMinor === revBeforeFail.refundedMinor, `delta=${revAfterFail.refundedMinor - revBeforeFail.refundedMinor}`);
+const dispEAfter = (await j('GET', '/admin/disputes', { token: admin })).data.find((d) => d.orderId === orderE.id);
+ok('the dispute is handed back so an admin can retry', !!dispEAfter && dispEAfter.status === 'OPEN', `status=${dispEAfter?.status}`);
+const orderEAfter = (await j('GET', `/orders/${orderE.id}`, { token: buyer })).data;
+ok('the order is not marked refunded on a failed refund', orderEAfter.status !== 'REFUNDED', `status=${orderEAfter.status}`);
+// Successful refunds carry the gateway's own refund id, so a ledger row can be
+// matched against the gateway rather than believed on its own.
+const succeeded = (await j('GET', '/admin/payables', { token: admin })).data;
+ok('the books balance after a refused refund', succeeded.reconciliation.balanced, `drift=${succeeded.reconciliation.driftMinor}`);
+
+// --- 14. the float dwarfs the revenue, and the report says so -----------------
 // Not a pass/fail on the ratio itself — the point is that both numbers are now
 // knowable from the API, which is what the liability finding required.
 const rev = (await j("GET", "/admin/revenue?days=365", { token: admin })).data;

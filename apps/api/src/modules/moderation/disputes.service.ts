@@ -3,6 +3,7 @@ import { DisputeStatus, OrderStatus, TransactionType, type Dispute, type Prisma 
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AppError } from '../../common/errors/app-error';
+import { PaymentsService } from '../payments/payments.service';
 
 // A dispute can be opened once the money is committed and until the deal is closed.
 const DISPUTABLE: OrderStatus[] = [
@@ -18,6 +19,7 @@ export class DisputesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly payments: PaymentsService,
   ) {}
 
   async open(userId: string, orderId: string, reason: string, evidence?: string[]): Promise<Dispute> {
@@ -109,8 +111,21 @@ export class DisputesService {
     });
     if (claimed.count === 0) throw AppError.illegalState('Dispute is already resolved');
 
-    if (status === DisputeStatus.RESOLVED_REFUND) await this.bookRefund(dispute.orderId);
-    if (status === DisputeStatus.RESOLVED_PARTIAL) await this.bookRefund(dispute.orderId, refundAmountMinor);
+    if (status === DisputeStatus.RESOLVED_REFUND || status === DisputeStatus.RESOLVED_PARTIAL) {
+      try {
+        await this.bookRefund(dispute.orderId, refundAmountMinor, disputeId);
+      } catch (err) {
+        // The gateway refused, so no money moved. Hand the dispute back rather
+        // than leaving it closed as refunded — an admin has to be able to retry,
+        // and a resolution that claims a refund nobody received is the bug this
+        // whole path exists to prevent.
+        await this.prisma.dispute.updateMany({
+          where: { id: disputeId, status },
+          data: { status: dispute.status, resolution: dispute.resolution, resolvedAt: dispute.resolvedAt },
+        });
+        throw err;
+      }
+    }
 
     await this.audit.record({
       actorId: adminId,
@@ -141,7 +156,7 @@ export class DisputesService {
    * full refund twice; partial refunds are guarded by the dispute claim in
    * `resolve()`, which is what stops the same dispute being resolved twice.
    */
-  private async bookRefund(orderId: string, amountMinor?: number): Promise<void> {
+  private async bookRefund(orderId: string, amountMinor: number | undefined, disputeId: string): Promise<void> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       select: { totalMinor: true, feeMinor: true, currency: true, sellerId: true },
@@ -150,6 +165,13 @@ export class DisputesService {
 
     const partial = amountMinor !== undefined;
     const refundMinor = amountMinor ?? order.totalMinor;
+
+    // Gateway first, ledger second, and never the other way round. Writing the
+    // REFUND row first would leave the books asserting money reached the buyer
+    // whenever the gateway call then failed — which is exactly what the ledger is
+    // supposed to be trustworthy about. `disputeId` is the idempotency reference,
+    // so a retried resolution cannot refund the buyer twice at the gateway.
+    const { providerRefundId } = await this.payments.refundToBuyer(orderId, refundMinor, disputeId);
     // Proportional, and rounded once: the platform gives back the same share of
     // its commission as the buyer is getting back of their payment.
     const feeReversalMinor = partial
@@ -171,6 +193,7 @@ export class DisputesService {
           type: TransactionType.REFUND,
           amountMinor: refundMinor,
           currency: order.currency,
+          providerRef: providerRefundId,
           meta: { basis: partial ? 'order.refund.partial' : 'order.refund' },
         },
       });

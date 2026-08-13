@@ -34,6 +34,17 @@ export interface ClientCallback {
   signature: string;
 }
 
+export interface RefundInput {
+  providerPaymentId: string;
+  amountMinor: number;
+  /** Our own reference, so a gateway refund can be traced back to an order. */
+  reference: string;
+}
+
+export interface RefundResult {
+  providerRefundId: string;
+}
+
 export interface IPaymentProvider {
   readonly key: ProviderEnum;
   createIntent(input: CreateIntentInput): Promise<CreateIntentResult>;
@@ -51,4 +62,14 @@ export interface IPaymentProvider {
    * one HMAC header, Cashfree signs timestamp+body across two headers).
    */
   verifyAndParseWebhook(rawBody: Buffer, headers: WebhookHeaders): WebhookEvent;
+  /**
+   * Send money back to the buyer. Optional on the port, but a provider that
+   * cannot refund must not silently do nothing — callers are expected to fail the
+   * refund rather than book a ledger row for money that never moved.
+   *
+   * Throws if the gateway rejects. It must be called *before* the refund is
+   * written to the ledger: a REFUND row for a transfer that never happened is
+   * worse than a failed resolution an admin can retry.
+   */
+  refund?(input: RefundInput): Promise<RefundResult>;
 }

@@ -90,6 +90,10 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   proportion, the seller's debt drops by the refund net of that reversal, the order
   is not marked REFUNDED, the remainder becomes payable once the dispute closes,
   a second resolution is refused, and the reconciliation still balances throughout.
+  And the gateway path: refunds used to be ledger-only, so the suite pins that a
+  provider which cannot refund (Cashfree implements none — a real limitation, not a
+  mock) fails the resolution outright, books nothing, hands the dispute back as OPEN
+  for an admin to retry, and leaves the order un-refunded.
 - **payment-verify**: the browser callback half of checkout — a forged signature is
   rejected as a client error (422, never a 5xx that invites a retry) and leaves the
   order PENDING, confirmation requires auth and order ownership (a valid signature
