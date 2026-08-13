@@ -93,7 +93,9 @@ ok('and out of withheld', pA.withheldMinor - pDelivered.withheldMinor === netA, 
 
 // --- 6. the seller appears in the per-seller breakdown ------------------------
 const meAdmin = (await j('GET', '/auth/me', { token: admin })).data;
-const sellerRow = pDelivered.bySeller.find((s) => s.sellerId === (meAdmin.id ?? meAdmin.user?.id));
+const meId = meAdmin.user?.id ?? meAdmin.id;
+ok('the admin seller id resolves', typeof meId === 'string' && meId.length > 0, `meId=${meId}`);
+const sellerRow = pDelivered.bySeller.find((s) => s.sellerId === meId);
 ok('the seller owed money is listed', !!sellerRow, `sellers=${pDelivered.bySeller.length}`);
 ok('per-seller owed never exceeds the total', pDelivered.bySeller.reduce((a, s) => a + s.owedMinor, 0) <= pDelivered.heldMinor, `sum=${pDelivered.bySeller.reduce((a, s) => a + s.owedMinor, 0)} total=${pDelivered.heldMinor}`);
 ok('per-seller releasable never exceeds that seller owed', pDelivered.bySeller.every((s) => s.releasableMinor <= s.owedMinor));
@@ -119,10 +121,66 @@ ok('a refunded order is no longer owed to the seller', pRefunded.heldMinor === p
 ok('the two derivations still agree after a refund', pRefunded.reconciliation.balanced, `drift=${pRefunded.reconciliation.driftMinor}`);
 ok('the refund is reflected in the ledger totals', pRefunded.reconciliation.refundedMinor - rc.refundedMinor === orderA.totalMinor, `delta=${pRefunded.reconciliation.refundedMinor - rc.refundedMinor} expected=${orderA.totalMinor}`);
 
-// --- 9. the float dwarfs the revenue, and the report says so ------------------
+// --- 9. settlement takes the money out of the held balance --------------------
+const settleAnon = await j('POST', '/admin/payables/settle', { key: `s0-${RUN}`, body: { sellerId: meId, reference: 'UTR1' } });
+ok('settlement requires auth', settleAnon.status === 401, `status=${settleAnon.status}`);
+const settleBuyer = await j('POST', '/admin/payables/settle', { token: buyer, key: `s1-${RUN}`, body: { sellerId: meId, reference: 'UTR1' } });
+ok('settlement is admin-only', settleBuyer.status === 403, `status=${settleBuyer.status}`);
+const settleUnknown = await j('POST', '/admin/payables/settle', { token: admin, key: `s2-${RUN}`, body: { sellerId: 'nope', reference: 'UTR1' } });
+ok('settling an unknown seller -> 404', settleUnknown.status === 404, `status=${settleUnknown.status}`);
+// A PAYOUT row that cannot be traced to money leaving an account is worse than none.
+const settleNoRef = await j('POST', '/admin/payables/settle', { token: admin, key: `s3-${RUN}`, body: { sellerId: meId } });
+ok('settlement without a transfer reference is rejected', settleNoRef.status === 422 || settleNoRef.status === 400, `status=${settleNoRef.status}`);
+
+// Order B: captured and delivered, so it is genuinely payable.
+const orderB = await placeOrder('b', 950000);
+await capture(orderB, 'b');
+await j('POST', `/orders/${orderB.id}/transition`, { token: admin, body: { action: 'pack' } });
+await j('POST', `/orders/${orderB.id}/transition`, { token: admin, body: { action: 'ship', trackingNote: 'BlueDart 2' } });
+await j('POST', `/orders/${orderB.id}/transition`, { token: buyer, body: { action: 'deliver' } });
+
+const preSettle = await payables();
+ok('there is money to settle', preSettle.releasableMinor > 0, `releasable=${preSettle.releasableMinor}`);
+const settled = await j('POST', '/admin/payables/settle', { token: admin, key: `s4-${RUN}`, body: { sellerId: meId, reference: `UTR-${RUN}` } });
+ok('settlement accepted', settled.status === 200 || settled.status === 201, `status=${settled.status}`);
+ok('settlement pays exactly what was releasable', settled.data.settledMinor === preSettle.releasableMinor, `paid=${settled.data?.settledMinor} releasable=${preSettle.releasableMinor}`);
+ok('settlement carries the transfer reference', settled.data.reference === `UTR-${RUN}` && !!settled.data.batchId, `ref=${settled.data?.reference}`);
+
+const postSettle = await payables();
+ok('settling reduces the liability by what was paid', preSettle.heldMinor - postSettle.heldMinor === settled.data.settledMinor, `delta=${preSettle.heldMinor - postSettle.heldMinor} paid=${settled.data.settledMinor}`);
+ok('nothing is left releasable', postSettle.releasableMinor === 0, `releasable=${postSettle.releasableMinor}`);
+ok('the payout is recorded in the ledger', postSettle.reconciliation.paidOutMinor - preSettle.reconciliation.paidOutMinor === settled.data.settledMinor, `delta=${postSettle.reconciliation.paidOutMinor - preSettle.reconciliation.paidOutMinor}`);
+// The PAYOUT arm of the identity is the one that had never been exercised.
+ok('the books still balance after a payout', postSettle.reconciliation.balanced, `drift=${postSettle.reconciliation.driftMinor}`);
+ok('withheld money is not settled', postSettle.withheldMinor === preSettle.withheldMinor, `${postSettle.withheldMinor} vs ${preSettle.withheldMinor}`);
+const settleAgain = await j('POST', '/admin/payables/settle', { token: admin, key: `s5-${RUN}`, body: { sellerId: meId, reference: `UTR-${RUN}-2` } });
+ok('settling again pays nothing', settleAgain.data.settledMinor === 0, `paid=${settleAgain.data?.settledMinor}`);
+
+// --- 10. concurrent settlements cannot pay twice ------------------------------
+// Distinct idempotency keys on purpose: the interceptor would mask a missing lock,
+// and paying a seller twice is not recoverable by an apology.
+const orderC = await placeOrder('c', 1100000);
+await capture(orderC, 'c');
+await j('POST', `/orders/${orderC.id}/transition`, { token: admin, body: { action: 'pack' } });
+await j('POST', `/orders/${orderC.id}/transition`, { token: admin, body: { action: 'ship', trackingNote: 'BlueDart 3' } });
+await j('POST', `/orders/${orderC.id}/transition`, { token: buyer, body: { action: 'deliver' } });
+
+const preRace = await payables();
+const racers = await Promise.all(
+  Array.from({ length: 6 }, (_, i) =>
+    j('POST', '/admin/payables/settle', { token: admin, key: `race-${RUN}-${i}`, body: { sellerId: meId, reference: `UTR-RACE-${RUN}` } }),
+  ),
+);
+const claimed = racers.reduce((a, r) => a + (r.data?.settledMinor ?? 0), 0);
+const postRace = await payables();
+ok('six concurrent settlements pay the amount once, not six times', claimed === preRace.releasableMinor, `claimed=${claimed} releasable=${preRace.releasableMinor}`);
+ok('the ledger records exactly one payment', postRace.reconciliation.paidOutMinor - preRace.reconciliation.paidOutMinor === preRace.releasableMinor, `delta=${postRace.reconciliation.paidOutMinor - preRace.reconciliation.paidOutMinor} expected=${preRace.releasableMinor}`);
+ok('the books balance after the race', postRace.reconciliation.balanced, `drift=${postRace.reconciliation.driftMinor}`);
+
+// --- 11. the float dwarfs the revenue, and the report says so -----------------
 // Not a pass/fail on the ratio itself — the point is that both numbers are now
 // knowable from the API, which is what the liability finding required.
-const rev = (await j('GET', '/admin/revenue?days=365', { token: admin })).data;
+const rev = (await j("GET", "/admin/revenue?days=365", { token: admin })).data;
 ok('liability and revenue are both reportable', typeof rev.feeRevenueMinor === 'number' && typeof pRefunded.heldMinor === 'number');
 console.log(`\n  float: ₹${(pRefunded.heldMinor / 100).toLocaleString('en-IN')} held vs ₹${(rev.feeRevenueMinor / 100).toLocaleString('en-IN')} earned`);
 

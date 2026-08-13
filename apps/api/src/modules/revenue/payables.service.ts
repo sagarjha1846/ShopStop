@@ -1,6 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, TransactionType } from '@prisma/client';
+import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { AppError } from '../../common/errors/app-error';
 
 /**
  * Days after the buyer's money lands before held funds are considered overdue.
@@ -97,9 +100,107 @@ const PAYABLE_ORDERS = Prisma.sql`
     AND (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) > 0
 `;
 
+export interface SettlementResult {
+  batchId: string;
+  sellerId: string;
+  reference: string;
+  currency: string;
+  settledMinor: number;
+  orders: Array<{ orderId: string; amountMinor: number }>;
+}
+
 @Injectable()
 export class PayablesService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PayablesService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
+
+  /**
+   * Record a settlement to a seller.
+   *
+   * The bank transfer itself happens outside this system — there is no payout
+   * rail wired up, and pretending otherwise would be worse than not having one.
+   * What this does is make the transfer *known to the books*: it writes the
+   * PAYOUT ledger rows for the orders the payment covers, which is what takes
+   * the money out of the held balance. `reference` is the real-world handle for
+   * the transfer (a UTR, a batch id from the bank) so a ledger row can always be
+   * traced back to money that actually left an account.
+   *
+   * Paying a seller twice is not recoverable by an apology, so the guard is a row
+   * lock rather than a status read. Candidate orders are locked FOR UPDATE before
+   * anything is computed; a concurrent settlement blocks there, and once it
+   * proceeds it re-derives what is owed and finds the PAYOUT rows already written.
+   */
+  async settle(sellerId: string, reference: string, actorId: string, ip?: string): Promise<SettlementResult> {
+    const seller = await this.prisma.user.findUnique({ where: { id: sellerId }, select: { id: true } });
+    if (!seller) throw AppError.notFound('Seller');
+
+    const batchId = `stl_${Date.now().toString(36)}_${randomBytes(4).toString('hex')}`;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Lock first, compute second. Locking only `orders` (FOR UPDATE OF o) keeps
+      // Postgres happy about the outer join to disputes, and orders is the row
+      // whose payable state we are about to change.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT o.id
+        FROM orders o
+        JOIN payments p ON p.order_id = o.id AND p.status = 'CAPTURED'
+        LEFT JOIN disputes d ON d.order_id = o.id
+        WHERE o.seller_id = ${sellerId}
+          AND o.status = 'DELIVERED'
+          AND (d.status IS NULL OR d.status = 'RESOLVED_RELEASE')
+        FOR UPDATE OF o
+      `;
+      if (locked.length === 0) return { settledMinor: 0, orders: [] as Array<{ orderId: string; amountMinor: number }> };
+
+      const ids = locked.map((r) => r.id);
+      const owed = await tx.$queryRaw<Array<{ id: string; owed_minor: bigint; currency: string }>>`
+        SELECT o.id,
+               (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) AS owed_minor,
+               o.currency
+        FROM orders o
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(amount_minor), 0) AS paid FROM transactions
+          WHERE order_id = o.id AND type = 'PAYOUT'
+        ) po ON TRUE
+        WHERE o.id IN (${Prisma.join(ids)})
+          AND (o.total_minor - o.fee_minor) - COALESCE(po.paid, 0) > 0
+      `;
+      if (owed.length === 0) return { settledMinor: 0, orders: [] as Array<{ orderId: string; amountMinor: number }> };
+
+      await tx.transaction.createMany({
+        data: owed.map((r) => ({
+          orderId: r.id,
+          userId: sellerId,
+          type: TransactionType.PAYOUT,
+          amountMinor: Number(r.owed_minor),
+          currency: r.currency,
+          providerRef: reference,
+          meta: { basis: 'seller.settlement', batch: batchId },
+        })),
+      });
+
+      return {
+        settledMinor: owed.reduce((a, r) => a + Number(r.owed_minor), 0),
+        orders: owed.map((r) => ({ orderId: r.id, amountMinor: Number(r.owed_minor) })),
+      };
+    });
+
+    await this.audit.record({
+      actorId,
+      action: 'payables.settle',
+      targetType: 'USER',
+      targetId: sellerId,
+      ip,
+      meta: { batchId, reference, settledMinor: result.settledMinor, orders: result.orders.length },
+    });
+    this.logger.log(`Settled ${result.settledMinor} to ${sellerId} across ${result.orders.length} orders (${batchId})`);
+
+    return { batchId, sellerId, reference, currency: 'INR', ...result };
+  }
 
   /**
    * What the platform owes sellers right now, aged, with a reconciliation that

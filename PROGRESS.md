@@ -136,7 +136,16 @@ Design package (docs/) is complete; this tracks **implementation**.
       walking orders and by summing the ledger — and the drift between them is reported rather
       than reconciled away. Measured live on seed data: ₹6,13,160 held against ₹19,863 earned,
       a 31:1 float-to-revenue ratio, which is the docs/16 F1 exposure as a number rather than
-      a paragraph — verified 29/29
+      a paragraph
+- [x] Settlement recording (`POST /admin/payables/settle`): PAYOUT had sat in TransactionType
+      since Phase 2 and was written nowhere, so held money could only ever grow. Admin records
+      a transfer against a mandatory real-world reference (UTR/batch id) and the PAYOUT rows
+      take it out of the held balance. The bank rail stays external — there is no payout
+      integration and pretending otherwise would be worse than not having one. Guarded by a
+      `SELECT … FOR UPDATE` on the candidate orders rather than a status read, since paying a
+      seller twice is not recoverable: proved by removing the lock, where 3 of 6 concurrent
+      settlements paid (₹26,460 sent for ₹8,820 of sales) and the reconciliation independently
+      caught it as drift — verified 47/47
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
@@ -154,7 +163,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 17 black-box E2E suites (302 API checks); CI runs unit +
+- [x] Test suites: 41 unit + 17 black-box E2E suites (320 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify/payables E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live

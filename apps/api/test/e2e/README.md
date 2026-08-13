@@ -75,8 +75,13 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   held, aging sums to held, overdue ≤ releasable), and at every step the liability
   computed by walking orders equals the liability computed from the ledger — two
   different tables and two different sums, so agreement is evidence the books are
-  consistent. Aging past the SLA is not exercised: all E2E data is minutes old, and
-  backdating it would mean writing to the DB behind the API these suites test.
+  consistent. Then settlement: admin-only, a transfer reference is mandatory, paying
+  a seller moves exactly the releasable amount out of held and into PAYOUT, settling
+  twice pays nothing the second time, and six *concurrently* fired settlements with
+  distinct idempotency keys pay the amount once rather than six times (verified
+  against the inverse — with the row lock removed, three of six paid). Aging past the
+  SLA is not exercised: all E2E data is minutes old, and backdating it would mean
+  writing to the DB behind the API these suites test.
 - **payment-verify**: the browser callback half of checkout — a forged signature is
   rejected as a client error (422, never a 5xx that invites a retry) and leaves the
   order PENDING, confirmation requires auth and order ownership (a valid signature
