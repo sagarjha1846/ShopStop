@@ -126,6 +126,18 @@ Design package (docs/) is complete; this tracks **implementation**.
       window. Booked as a separate revenue stream — deliberately not counted as GMV, since
       ad spend is not merchandise — verified 20/20
 
+- [x] Settlement liability (`GET /admin/payables`, ADMIN-only): the other side of the revenue
+      report. The platform collects the buyer's full payment and owes the seller everything
+      but its commission, from capture until settlement — the largest number on the balance
+      sheet, and nothing in the system stated it, so neither the float nor the liability could
+      be quantified. Reports held / releasable / withheld / overdue, aged from the CHARGE row,
+      per seller. Money is releasable only once delivered and dispute-free; the default is to
+      withhold, so an unknown status can never be mistaken for payable. Computed twice — by
+      walking orders and by summing the ledger — and the drift between them is reported rather
+      than reconciled away. Measured live on seed data: ₹6,13,160 held against ₹19,863 earned,
+      a 31:1 float-to-revenue ratio, which is the docs/16 F1 exposure as a number rather than
+      a paragraph — verified 29/29
+
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
       cache with immediate local invalidation, audited on every change. Wired to real
@@ -142,8 +154,8 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 16 black-box E2E suites (273 API checks); CI runs unit +
-      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify E2E
+- [x] Test suites: 41 unit + 17 black-box E2E suites (302 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify/payables E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,

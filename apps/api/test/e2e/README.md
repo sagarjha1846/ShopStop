@@ -22,6 +22,7 @@ node test/e2e/questions.e2e.mjs  # public listing Q&A: ask → answer → counts
 node test/e2e/feature-flags.e2e.mjs  # switches that change behaviour, not just persist
 node test/e2e/read-receipts.e2e.mjs  # unread counts + read receipts, and inbox isolation
 node test/e2e/payment-verify.e2e.mjs # browser payment callback: signature → capture, no double-book
+node test/e2e/payables.e2e.mjs   # settlement liability: what the platform owes sellers, reconciled
 # realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
 node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
@@ -67,6 +68,15 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   commission drops to zero and back, an order priced fee-free stays fee-free
   after re-enabling, the Q&A kill switch closes asking while leaving existing
   answers readable. Restores flags on exit, since they are global state.
+- **payables**: the settlement liability — admin-only, the money lifecycle end to end
+  (capture adds exactly total − commission, delivery moves it from withheld to
+  releasable, an open dispute pulls it back out, a refund extinguishes it, an unpaid
+  order is never a debt), the report's internal identities (releasable + withheld =
+  held, aging sums to held, overdue ≤ releasable), and at every step the liability
+  computed by walking orders equals the liability computed from the ledger — two
+  different tables and two different sums, so agreement is evidence the books are
+  consistent. Aging past the SLA is not exercised: all E2E data is minutes old, and
+  backdating it would mean writing to the DB behind the API these suites test.
 - **payment-verify**: the browser callback half of checkout — a forged signature is
   rejected as a client error (422, never a 5xx that invites a retry) and leaves the
   order PENDING, confirmation requires auth and order ownership (a valid signature
