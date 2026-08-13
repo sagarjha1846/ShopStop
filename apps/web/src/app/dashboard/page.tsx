@@ -53,6 +53,22 @@ interface Earnings {
   pending: EarningsSplit;
   lifetimeNetMinor: number;
 }
+interface Payouts {
+  currency: string;
+  settlementSlaDays: number;
+  heldMinor: number;
+  releasableMinor: number;
+  withheldMinor: number;
+  paidOutMinor: number;
+  oldestHeldDays: number;
+  payouts: Array<{
+    batchId: string | null;
+    reference: string | null;
+    amountMinor: number;
+    orders: number;
+    paidAt: string;
+  }>;
+}
 
 const STATUS_TONE: Record<string, 'muted' | 'success' | 'warn' | 'danger' | 'brand'> = {
   PENDING: 'warn',
@@ -77,6 +93,7 @@ export default function DashboardPage() {
   const [selling, setSelling] = useState<Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [earnings, setEarnings] = useState<Earnings | null>(null);
+  const [payouts, setPayouts] = useState<Payouts | null>(null);
   const [pricing, setPricing] = useState<BoostPricing | null>(null);
   const [boosting, setBoosting] = useState<string | null>(null);
   const [boostMsg, setBoostMsg] = useState<string | null>(null);
@@ -139,13 +156,14 @@ export default function DashboardPage() {
         try {
           const meData = await apiAuthed<Me>('/me/profile');
           setMe(meData);
-          const [b, s, l, e, p, pl] = await Promise.all([
+          const [b, s, l, e, p, pl, po] = await Promise.all([
             apiAuthed<Order[]>('/orders?role=buyer'),
             apiAuthed<Order[]>('/orders?role=seller'),
             apiAuthed<{ items: Listing[] }>(`/listings?sellerId=${meData.id}`),
             apiAuthed<Earnings>('/me/earnings'),
             apiAuthed<BoostPricing>('/boosts/pricing'),
             apiAuthed<Plan>('/me/subscription'),
+            apiAuthed<Payouts>('/me/payouts'),
           ]);
           setBuying(b);
           setSelling(s);
@@ -153,6 +171,7 @@ export default function DashboardPage() {
           setEarnings(e);
           setPricing(p);
           setPlan(pl);
+          setPayouts(po);
         } catch {
           /* ignore; show empty */
         }
@@ -194,8 +213,11 @@ export default function DashboardPage() {
             </span>
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {/* Not "paid out": this is what the sales earned after fees. What has
+                actually been transferred lives in the Payouts panel below, and
+                conflating the two tells a seller they have money they do not. */}
             <div>
-              <dt className="text-xs uppercase tracking-wide text-muted">Paid out to you</dt>
+              <dt className="text-xs uppercase tracking-wide text-muted">Earned (after fees)</dt>
               <dd className="text-lg font-semibold text-success">
                 {formatMoney(earnings.settled.netMinor, earnings.currency)}
               </dd>
@@ -221,6 +243,72 @@ export default function DashboardPage() {
               <p className="text-xs text-muted">{earnings.pending.orders} awaiting payment</p>
             </div>
           </dl>
+        </div>
+      )}
+
+      {payouts && (payouts.heldMinor > 0 || payouts.paidOutMinor > 0) && (
+        <div className="rounded-lg border bg-surface p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-semibold">Payouts</h2>
+            <span className="text-xs text-muted">
+              Released {payouts.settlementSlaDays} days after a sale is delivered
+            </span>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Ready to pay out</dt>
+              <dd className="text-lg font-semibold text-success">
+                {formatMoney(payouts.releasableMinor, payouts.currency)}
+              </dd>
+              <p className="text-xs text-muted">delivered, no open dispute</p>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">On hold</dt>
+              <dd className="text-lg font-semibold">
+                {formatMoney(payouts.withheldMinor, payouts.currency)}
+              </dd>
+              <p className="text-xs text-muted">until the buyer receives the item</p>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Total owed to you</dt>
+              <dd className="text-lg font-semibold">
+                {formatMoney(payouts.heldMinor, payouts.currency)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Paid to you</dt>
+              <dd className="text-lg font-semibold">
+                {formatMoney(payouts.paidOutMinor, payouts.currency)}
+              </dd>
+              <p className="text-xs text-muted">lifetime</p>
+            </div>
+          </dl>
+          {payouts.payouts.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                    <th className="pb-2 font-medium">Date</th>
+                    <th className="pb-2 font-medium">Amount</th>
+                    <th className="pb-2 font-medium">Orders</th>
+                    <th className="pb-2 font-medium">Reference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payouts.payouts.map((p) => (
+                    <tr key={p.batchId ?? p.paidAt} className="border-t">
+                      <td className="py-2">{new Date(p.paidAt).toLocaleDateString()}</td>
+                      <td className="py-2 font-medium">{formatMoney(p.amountMinor, payouts.currency)}</td>
+                      <td className="py-2 text-muted">{p.orders}</td>
+                      {/* The bank reference, so a seller can match a payout against
+                          their own statement rather than taking our word for it. */}
+                      <td className="py-2 font-mono text-xs text-muted">{p.reference ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

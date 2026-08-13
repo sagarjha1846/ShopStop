@@ -153,6 +153,16 @@ Design package (docs/) is complete; this tracks **implementation**.
       the E2E asserts a second account sees zeros rather than someone else's history. Lifetime
       paid is its own aggregate rather than a sum of the 20-row history, so a seller past their
       twentieth payout is not shown less than they were paid — verified 55/55
+- [x] Payables + payouts in the product, not just the API: admin console gains a Payables
+      panel (held / ready / withheld / overdue, per-seller table, and a Record-payout action
+      that asks for the bank reference before writing anything) and the seller dashboard gains
+      a Payouts panel with history and the transfer reference against each line, so a seller
+      can match a payout to their own bank statement. The reconciliation is shown, and drift
+      is rendered in red with settlement disabled — a wrong ledger should stop payouts, not be
+      hidden behind a reassuring total. Also fixed a live mislabel: the dashboard called
+      captured-sale net "Paid out to you", which told sellers they had money that had never
+      been sent; it now reads "Earned (after fees)" with actual payouts in their own panel.
+      Verified in Chromium against the live API — both panels render real figures
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s

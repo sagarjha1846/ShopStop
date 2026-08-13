@@ -73,6 +73,36 @@ interface Revenue {
   }>;
   estNetCommissionMinor: number;
 }
+interface Payables {
+  currency: string;
+  settlementSlaDays: number;
+  heldMinor: number;
+  releasableMinor: number;
+  withheldMinor: number;
+  overdueMinor: number;
+  sellerCount: number;
+  orderCount: number;
+  oldestHeldDays: number;
+  aging: Array<{ bucket: string; minor: number; orders: number }>;
+  bySeller: Array<{
+    sellerId: string;
+    handle: string;
+    owedMinor: number;
+    releasableMinor: number;
+    orders: number;
+    oldestHeldDays: number;
+  }>;
+  reconciliation: {
+    collectedMinor: number;
+    commissionMinor: number;
+    refundedMinor: number;
+    paidOutMinor: number;
+    ledgerHeldMinor: number;
+    orderHeldMinor: number;
+    driftMinor: number;
+    balanced: boolean;
+  };
+}
 
 export default function AdminPage() {
   const [ready, setReady] = useState(false);
@@ -81,6 +111,9 @@ export default function AdminPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [revenue, setRevenue] = useState<Revenue | null>(null);
+  const [payables, setPayables] = useState<Payables | null>(null);
+  const [settling, setSettling] = useState<string | null>(null);
+  const [settleMsg, setSettleMsg] = useState<string | null>(null);
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [flags, setFlags] = useState<Flag[]>([]);
 
@@ -97,6 +130,37 @@ export default function AdminPage() {
     }
   }
   const [msg, setMsg] = useState<string | null>(null);
+
+  /**
+   * Record a settlement already sent to the seller's bank. This does not move
+   * money — no payout rail is wired up — so it asks for the transfer reference
+   * first: a PAYOUT row that can't be traced to a real transfer is worse than none.
+   */
+  async function settle(sellerId: string, handle: string, amountMinor: number, currency: string) {
+    const reference = window.prompt(
+      `Record a payout of ${formatMoney(amountMinor, currency)} to @${handle}.\n\n` +
+        `Enter the bank transfer reference (UTR) for the payment you have already sent:`,
+    );
+    if (!reference || reference.trim().length < 3) return;
+    setSettling(sellerId);
+    setSettleMsg(null);
+    try {
+      const res = await apiAuthed<{ settledMinor: number; orders: Array<unknown> }>(
+        '/admin/payables/settle',
+        { method: 'POST', body: { sellerId, reference: reference.trim() } },
+      );
+      setSettleMsg(
+        res.settledMinor > 0
+          ? `Recorded ${formatMoney(res.settledMinor, currency)} to @${handle} across ${res.orders.length} order(s).`
+          : `Nothing was outstanding for @${handle} — no payout recorded.`,
+      );
+      setPayables(await apiAuthed<Payables>('/admin/payables'));
+    } catch (e) {
+      setSettleMsg(e instanceof Error ? e.message : 'Could not record the settlement');
+    } finally {
+      setSettling(null);
+    }
+  }
 
   const loadQueue = useCallback(async () => {
     const [q, d] = await Promise.all([
@@ -119,14 +183,16 @@ export default function AdminPage() {
           // Revenue is the company's P&L — admins only, not moderators.
           if (me.role === 'ADMIN') {
             try {
-              const [rev, fun, fl] = await Promise.all([
+              const [rev, fun, fl, pay] = await Promise.all([
                 apiAuthed<Revenue>('/admin/revenue?days=30'),
                 apiAuthed<Funnel>('/admin/funnel?days=30'),
                 apiAuthed<Flag[]>('/admin/feature-flags'),
+                apiAuthed<Payables>('/admin/payables'),
               ]);
               setRevenue(rev);
               setFunnel(fun);
               setFlags(fl);
+              setPayables(pay);
             } catch {
               /* ignore */
             }
@@ -253,6 +319,108 @@ export default function AdminPage() {
             <p className="mt-3 text-xs text-muted">
               Not measurable yet: {funnel.notMeasurable.map((x) => x.metric).join('; ')}.
             </p>
+          )}
+        </section>
+      )}
+
+      {payables && (
+        <section className="rounded-lg border bg-surface p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-semibold">Payables · money held for sellers</h2>
+            <span className="text-xs text-muted">
+              {payables.orderCount} order(s) · {payables.sellerCount} seller(s)
+            </span>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Held (liability)</dt>
+              <dd className="text-xl font-bold">{formatMoney(payables.heldMinor, payables.currency)}</dd>
+              <p className="text-xs text-muted">oldest {payables.oldestHeldDays}d</p>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Ready to pay</dt>
+              <dd className="text-xl font-bold text-success">
+                {formatMoney(payables.releasableMinor, payables.currency)}
+              </dd>
+              <p className="text-xs text-muted">delivered, dispute-free</p>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Withheld</dt>
+              <dd className="text-xl font-bold">
+                {formatMoney(payables.withheldMinor, payables.currency)}
+              </dd>
+              <p className="text-xs text-muted">in transit or disputed</p>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted">Overdue</dt>
+              <dd className={`text-xl font-bold ${payables.overdueMinor > 0 ? 'text-danger' : ''}`}>
+                {formatMoney(payables.overdueMinor, payables.currency)}
+              </dd>
+              <p className="text-xs text-muted">past {payables.settlementSlaDays}d SLA</p>
+            </div>
+          </dl>
+
+          {/* The liability is computed twice — from orders and from the ledger. If
+              they disagree the books are wrong, and that is worth shouting about
+              rather than hiding behind a reassuring total. */}
+          <p
+            className={`mt-3 text-xs ${payables.reconciliation.balanced ? 'text-muted' : 'font-semibold text-danger'}`}
+          >
+            {payables.reconciliation.balanced
+              ? `Reconciled: collected ${formatMoney(payables.reconciliation.collectedMinor, payables.currency)} − commission ${formatMoney(payables.reconciliation.commissionMinor, payables.currency)} − refunds ${formatMoney(payables.reconciliation.refundedMinor, payables.currency)} − paid out ${formatMoney(payables.reconciliation.paidOutMinor, payables.currency)} = held.`
+              : `LEDGER DRIFT of ${formatMoney(payables.reconciliation.driftMinor, payables.currency)} — orders and ledger disagree. Do not settle until this is explained.`}
+          </p>
+
+          {settleMsg && <p className="mt-2 text-sm">{settleMsg}</p>}
+
+          {payables.bySeller.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                    <th className="pb-2 font-medium">Seller</th>
+                    <th className="pb-2 font-medium">Owed</th>
+                    <th className="pb-2 font-medium">Ready to pay</th>
+                    <th className="pb-2 font-medium">Orders</th>
+                    <th className="pb-2 font-medium">Oldest</th>
+                    <th className="pb-2 font-medium"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payables.bySeller.map((s) => (
+                    <tr key={s.sellerId} className="border-t">
+                      <td className="py-2">@{s.handle}</td>
+                      <td className="py-2 font-medium">{formatMoney(s.owedMinor, payables.currency)}</td>
+                      <td className="py-2 text-success">
+                        {formatMoney(s.releasableMinor, payables.currency)}
+                      </td>
+                      <td className="py-2 text-muted">{s.orders}</td>
+                      <td className="py-2 text-muted">{s.oldestHeldDays}d</td>
+                      <td className="py-2 text-right">
+                        <Button
+                          variant="outline"
+                          className="px-3 py-1 text-xs"
+                          disabled={
+                            s.releasableMinor <= 0 ||
+                            settling === s.sellerId ||
+                            !payables.reconciliation.balanced
+                          }
+                          onClick={() =>
+                            settle(s.sellerId, s.handle, s.releasableMinor, payables.currency)
+                          }
+                        >
+                          {settling === s.sellerId ? 'Recording…' : 'Record payout'}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-xs text-muted">
+                Recording a payout writes the ledger rows for a transfer you have already sent from
+                the bank. It does not move money.
+              </p>
+            </div>
           )}
         </section>
       )}
