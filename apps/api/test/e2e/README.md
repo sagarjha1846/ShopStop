@@ -21,6 +21,7 @@ node test/e2e/funnel.e2e.mjs     # the PRD's success metrics computed from live 
 node test/e2e/questions.e2e.mjs  # public listing Q&A: ask → answer → counts as liquidity
 node test/e2e/feature-flags.e2e.mjs  # switches that change behaviour, not just persist
 node test/e2e/read-receipts.e2e.mjs  # unread counts + read receipts, and inbox isolation
+node test/e2e/payment-verify.e2e.mjs # browser payment callback: signature → capture, no double-book
 # realtime needs a socket client: npm i socket.io-client (or run from a dir that has it)
 node test/e2e/realtime.e2e.mjs   # socket auth → thread:join ABAC → live message:new → anon reject
 ```
@@ -66,6 +67,12 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   commission drops to zero and back, an order priced fee-free stays fee-free
   after re-enabling, the Q&A kill switch closes asking while leaving existing
   answers readable. Restores flags on exit, since they are global state.
+- **payment-verify**: the browser callback half of checkout — a forged signature is
+  rejected as a client error (422, never a 5xx that invites a retry) and leaves the
+  order PENDING, confirmation requires auth and order ownership (a valid signature
+  proves the gateway made the payload, not who is replaying it), a valid callback
+  captures and books GMV + commission, a later webhook for the same payment converges
+  instead of double-booking, replays are no-ops, unknown provider orders 404.
 - **read-receipts**: per-thread unread counts (own messages never unread to you),
   opening a thread clears them, a later message goes unread again, the
   counterparty read position is exposed and does not advance on its own, and a

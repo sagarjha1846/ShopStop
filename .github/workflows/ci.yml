@@ -123,6 +123,7 @@ jobs:
           node test/e2e/questions.e2e.mjs
           node test/e2e/feature-flags.e2e.mjs
           node test/e2e/read-receipts.e2e.mjs
+          node test/e2e/payment-verify.e2e.mjs
 
   security:
     runs-on: ubuntu-latest

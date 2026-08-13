@@ -52,6 +52,13 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Idempotency interceptor (Redis: fingerprint + in-flight lock + cache-before-emit)
 - [x] Orders + actor-aware state machine + timeline + inventory (SOLD/restock)
 - [x] Payments: Razorpay + Cashfree behind one provider port (per-provider webhook HMAC), idempotent capture + ledger — verified
+- [x] Browser callback verification (`POST /payments/verify`): checkout's missing half. The
+      gateway hands the browser a signed `HMAC(order_id|payment_id, KEY_SECRET)` on success —
+      a different key *and* payload shape from the webhook signature — and we verified only
+      webhooks, so a buyer had no way to be told their payment worked. Confirms in the same
+      idempotent capture the webhook uses, so whichever lands first books the money and the
+      other is a no-op. Authenticated + ownership-checked: the signature proves the gateway
+      made the payload, not who is replaying it — verified 16/16
 - [x] Reviews (verified-purchase) + reputation recompute
 - [x] Coupons: admin/seller creation + checkout discount (atomic redemption limit, release-on-cancel) — verified 6/6
 - [x] Messaging (threads, messages, structured offers accept/decline/counter)
@@ -135,8 +142,8 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 15 black-box E2E suites (257 API checks); CI runs unit +
-      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts E2E
+- [x] Test suites: 41 unit + 16 black-box E2E suites (273 API checks); CI runs unit +
+      commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,

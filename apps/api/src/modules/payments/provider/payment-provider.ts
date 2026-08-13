@@ -28,9 +28,23 @@ export interface WebhookEvent {
  */
 export type WebhookHeaders = Record<string, string | string[] | undefined>;
 
+export interface ClientCallback {
+  providerOrderId: string;
+  providerPaymentId: string;
+  signature: string;
+}
+
 export interface IPaymentProvider {
   readonly key: ProviderEnum;
   createIntent(input: CreateIntentInput): Promise<CreateIntentResult>;
+  /**
+   * Verify the payload a gateway hands the *browser* on success. Optional: not
+   * every provider has a client callback. Returns true only for a valid
+   * signature; it never asserts the money moved — the webhook remains the source
+   * of truth, and this only lets the buyer's own session confirm immediately
+   * instead of watching a spinner until the webhook lands.
+   */
+  verifyClientCallback?(cb: ClientCallback): boolean;
   /**
    * Returns the parsed event iff the signature is valid; throws otherwise.
    * Providers read whatever signature/timestamp headers they need (Razorpay uses

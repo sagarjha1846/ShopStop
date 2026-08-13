@@ -19,6 +19,21 @@ class CreateIntentDto {
   provider?: ProviderEnum;
 }
 
+class VerifyPaymentDto {
+  @IsString()
+  providerOrderId!: string;
+
+  @IsString()
+  providerPaymentId!: string;
+
+  @IsString()
+  signature!: string;
+
+  @IsOptional()
+  @IsIn(Object.values(ProviderEnum))
+  provider?: ProviderEnum;
+}
+
 @ApiTags('Payments')
 @Controller('payments')
 export class PaymentsController {
@@ -29,6 +44,23 @@ export class PaymentsController {
   @HttpCode(200)
   intent(@CurrentUser() user: AuthUser, @Body() dto: CreateIntentDto) {
     return this.payments.createIntent(dto.orderId, user.id, dto.provider ?? ProviderEnum.RAZORPAY);
+  }
+
+  /**
+   * Confirm from the browser callback after gateway checkout closes. Same
+   * idempotent capture as the webhook — this only removes the wait.
+   *
+   * Authenticated on purpose: the signature proves the gateway produced the
+   * payload, not who is replaying it, so ownership is still checked downstream.
+   */
+  @Post('verify')
+  @HttpCode(200)
+  verify(@CurrentUser() user: AuthUser, @Body() dto: VerifyPaymentDto) {
+    return this.payments.confirmFromClient(user.id, dto.provider ?? ProviderEnum.RAZORPAY, {
+      providerOrderId: dto.providerOrderId,
+      providerPaymentId: dto.providerPaymentId,
+      signature: dto.signature,
+    });
   }
 
   /**

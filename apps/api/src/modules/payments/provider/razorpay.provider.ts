@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { AppConfigService } from '../../../config/config.service';
 import { AppError } from '../../../common/errors/app-error';
 import type {
+  ClientCallback,
   CreateIntentInput,
   CreateIntentResult,
   IPaymentProvider,
@@ -62,6 +63,21 @@ export class RazorpayProvider implements IPaymentProvider {
     }
     const data = (await res.json()) as { id: string };
     return { providerOrderId: data.id, clientToken: this.config.get('RAZORPAY_KEY_ID') };
+  }
+
+  /**
+   * Razorpay signs the browser callback as HMAC(order_id|payment_id) with the API
+   * key secret — a different key and a different payload shape from the webhook
+   * signature, so the two verifications cannot share an implementation.
+   */
+  verifyClientCallback(cb: ClientCallback): boolean {
+    const secret = this.config.get('RAZORPAY_KEY_SECRET');
+    const expected = createHmac('sha256', secret)
+      .update(`${cb.providerOrderId}|${cb.providerPaymentId}`)
+      .digest('hex');
+    const a = Buffer.from(expected);
+    const b = Buffer.from(cb.signature ?? '');
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 
   verifyAndParseWebhook(rawBody: Buffer, headers: WebhookHeaders): WebhookEvent {

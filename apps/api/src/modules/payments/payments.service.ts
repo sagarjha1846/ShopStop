@@ -102,6 +102,46 @@ export class PaymentsService {
   }
 
   /**
+   * Confirm a payment from the buyer's own browser callback.
+   *
+   * The signature proves the gateway produced this payload, so it is safe to
+   * advance the order immediately rather than making the buyer watch a spinner
+   * until the webhook arrives. It is *not* a second source of truth: it routes
+   * into exactly the same idempotent capture as the webhook, so whichever lands
+   * first books the money and the other is a no-op.
+   */
+  async confirmFromClient(
+    userId: string,
+    providerKey: ProviderEnum,
+    cb: { providerOrderId: string; providerPaymentId: string; signature: string },
+  ): Promise<{ status: PaymentStatus; orderId: string }> {
+    const provider = this.providerOrThrow(providerKey);
+    if (!provider.verifyClientCallback) {
+      throw AppError.validation(`${providerKey} does not support client confirmation`);
+    }
+    if (!provider.verifyClientCallback(cb)) {
+      this.logger.warn(`Rejected client callback with a bad signature for ${cb.providerOrderId}`);
+      // Deliberately not PAYMENT_ERROR (502): nothing upstream is broken. The
+      // caller sent a payload that doesn't verify, and 502 would invite a retry.
+      throw AppError.validation('Invalid payment signature');
+    }
+
+    const payment = await this.prisma.payment.findFirst({
+      where: { providerOrderId: cb.providerOrderId },
+      include: { order: { select: { id: true, buyerId: true } } },
+    });
+    if (!payment) throw AppError.notFound('Payment');
+    // Only the buyer who owns the order may confirm it. A valid signature proves
+    // the gateway made the payload, not who is replaying it at us.
+    if (payment.order.buyerId !== userId) throw AppError.forbidden();
+
+    await this.onCaptured(cb.providerOrderId, cb.providerPaymentId, payment.amountMinor, undefined);
+
+    const fresh = await this.prisma.payment.findUnique({ where: { id: payment.id } });
+    return { status: fresh?.status ?? payment.status, orderId: payment.orderId };
+  }
+
+  /**
    * Gateway webhook entry point. Verifies signature, is idempotent (a captured
    * payment reprocessed is a no-op), records a ledger Transaction, and advances the
    * order to ACCEPTED. Heavy follow-on work (receipts, payouts) is enqueued in Phase 4+.
