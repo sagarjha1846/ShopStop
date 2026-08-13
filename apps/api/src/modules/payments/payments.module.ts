@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { PaymentProvidersModule } from './provider/payment-providers.module';
+import { RefundsModule } from './refunds.module';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
@@ -6,13 +8,11 @@ import { BoostsService } from './boosts.service';
 import { BoostsController } from './boosts.controller';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionsController } from './subscriptions.controller';
-import { RazorpayProvider } from './provider/razorpay.provider';
-import { CashfreeProvider } from './provider/cashfree.provider';
 
 @Module({
-  imports: [OrdersModule],
+  imports: [OrdersModule, PaymentProvidersModule, RefundsModule],
   controllers: [PaymentsController, BoostsController, SubscriptionsController],
-  providers: [PaymentsService, BoostsService, SubscriptionsService, RazorpayProvider, CashfreeProvider],
+  providers: [PaymentsService, BoostsService, SubscriptionsService],
   exports: [PaymentsService, BoostsService, SubscriptionsService],
 })
 export class PaymentsModule {}

@@ -190,7 +190,20 @@ Design package (docs/) is complete; this tracks **implementation**.
       Verified against a real limitation rather than a mock: Cashfree implements no refund,
       and resolving one of its orders returns 409, books nothing, and leaves the dispute in
       the queue. Known gap: Cashfree refunds are unimplemented — deliberately refused
-      loudly rather than silently doing nothing — verified 72/72
+      loudly rather than silently doing nothing
+- [x] Every path that ends a paid sale now refunds. Two more were silently keeping the
+      buyer's money: cancelling an ACCEPTED (already captured) order, and the order state
+      machine's `refund` action, which a seller can invoke. Both changed status and did
+      nothing else — measured: cancel a paid 9,000 order and Δrefunded=0; use the refund
+      action and the order reads REFUNDED with Δrefunded=0 and the commission still booked.
+      Refunds now live in one `RefundsService` that all three callers share (disputes,
+      cancel, refund action), with the gateway call ahead of the ledger write and the order
+      status left to the caller — a buyer cancelling leaves CANCELLED, a dispute refund
+      leaves REFUNDED, a partial leaves the order untouched. Conflating money with state is
+      what let "REFUNDED" mean nothing. Never refunds more than was charged, which doubles
+      as the idempotency guard. Structurally, refunds sit in their own module depending only
+      on the gateway adapters: payments depends on orders, so hanging refunds off
+      PaymentsModule would have closed a cycle — verified 80/80
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
@@ -208,7 +221,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 17 black-box E2E suites (345 API checks); CI runs unit +
+- [x] Test suites: 41 unit + 17 black-box E2E suites (353 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify/payables E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live

@@ -93,7 +93,10 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   And the gateway path: refunds used to be ledger-only, so the suite pins that a
   provider which cannot refund (Cashfree implements none — a real limitation, not a
   mock) fails the resolution outright, books nothing, hands the dispute back as OPEN
-  for an admin to retry, and leaves the order un-refunded.
+  for an admin to retry, and leaves the order un-refunded. And the two other ways a
+  paid sale can end — cancelling an ACCEPTED order and the state machine's `refund`
+  action — which changed status and moved no money at all; both now refund in full,
+  hand back the commission, and leave the reconciliation balanced.
 - **payment-verify**: the browser callback half of checkout — a forged signature is
   rejected as a client error (422, never a 5xx that invites a retry) and leaves the
   order PENDING, confirmation requires auth and order ownership (a valid signature

@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AppError } from '../../common/errors/app-error';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { RefundsService } from '../payments/refunds.service';
 import { TrustScoreService } from '../trust/trust-score.service';
 import { AppConfigService } from '../../config/config.service';
 import { FeatureFlagsService } from '../flags/feature-flags.service';
@@ -23,6 +24,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly coupons: CouponsService,
+    private readonly refunds: RefundsService,
     private readonly trust: TrustScoreService,
     private readonly config: AppConfigService,
     private readonly flags: FeatureFlagsService,
@@ -151,6 +153,17 @@ export class OrdersService {
     note?: string,
   ): Promise<Order> {
     const nextStatus = resolveTransition(action, order.status, actor);
+
+    // Ending a paid sale has to give the money back. Cancelling an ACCEPTED order
+    // and the `refund` action both used to change status and nothing else, so the
+    // buyer saw CANCELLED or REFUNDED while their payment stayed in the platform's
+    // account. Refund first: if the gateway will not return the money, the order
+    // must not move to a state that says it did. Unpaid orders refund nothing and
+    // carry on.
+    if (nextStatus === OrderStatus.CANCELLED || nextStatus === OrderStatus.REFUNDED) {
+      await this.refunds.refundOrder(order.id, undefined, `order-${action}-${order.id}`);
+    }
+
     const timeline = [
       ...(Array.isArray(order.timeline) ? (order.timeline as unknown as TimelineEntry[]) : []),
       { status: nextStatus, actor, at: new Date().toISOString(), note },

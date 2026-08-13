@@ -264,7 +264,34 @@ ok('the order is not marked refunded on a failed refund', orderEAfter.status !==
 const succeeded = (await j('GET', '/admin/payables', { token: admin })).data;
 ok('the books balance after a refused refund', succeeded.reconciliation.balanced, `drift=${succeeded.reconciliation.driftMinor}`);
 
-// --- 14. the float dwarfs the revenue, and the report says so -----------------
+// --- 14. ending a paid sale gives the money back ------------------------------
+// Cancelling an ACCEPTED order and the state machine's `refund` action both used
+// to change status and nothing else: the buyer saw CANCELLED or REFUNDED while
+// their payment stayed in the platform's account.
+const orderF = await placeOrder('f', 900000);
+await capture(orderF, 'f');
+const beforeCancel = await payables();
+const revBeforeCancel = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+const cancelled = await j('POST', `/orders/${orderF.id}/transition`, { token: buyer, body: { action: 'cancel' } });
+ok('a paid order can still be cancelled', cancelled.data?.status === 'CANCELLED', `status=${cancelled.data?.status}`);
+const revAfterCancel = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+ok('cancelling a paid order refunds the buyer in full', revAfterCancel.refundedMinor - revBeforeCancel.refundedMinor === orderF.totalMinor, `delta=${revAfterCancel.refundedMinor - revBeforeCancel.refundedMinor} expected=${orderF.totalMinor}`);
+const afterCancel = await payables();
+ok('and clears what the seller was owed for it', beforeCancel.heldMinor - afterCancel.heldMinor === orderF.totalMinor - orderF.feeMinor, `delta=${beforeCancel.heldMinor - afterCancel.heldMinor}`);
+ok('the books balance after a cancel-refund', afterCancel.reconciliation.balanced, `drift=${afterCancel.reconciliation.driftMinor}`);
+
+const orderG = await placeOrder('g', 1100000);
+await capture(orderG, 'g');
+const revBeforeAction = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+const refunded = await j('POST', `/orders/${orderG.id}/transition`, { token: admin, body: { action: 'refund' } });
+ok('the refund action moves the order to REFUNDED', refunded.data?.status === 'REFUNDED', `status=${refunded.data?.status}`);
+const revAfterAction = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+ok('the refund action actually refunds', revAfterAction.refundedMinor - revBeforeAction.refundedMinor === orderG.totalMinor, `delta=${revAfterAction.refundedMinor - revBeforeAction.refundedMinor} expected=${orderG.totalMinor}`);
+ok('and hands back the commission', revBeforeAction.feeRevenueMinor - revAfterAction.feeRevenueMinor === orderG.feeMinor, `delta=${revBeforeAction.feeRevenueMinor - revAfterAction.feeRevenueMinor} expected=${orderG.feeMinor}`);
+const afterAction = await payables();
+ok('the books balance after a refund action', afterAction.reconciliation.balanced, `drift=${afterAction.reconciliation.driftMinor}`);
+
+// --- 15. the float dwarfs the revenue, and the report says so -----------------
 // Not a pass/fail on the ratio itself — the point is that both numbers are now
 // knowable from the API, which is what the liability finding required.
 const rev = (await j("GET", "/admin/revenue?days=365", { token: admin })).data;
