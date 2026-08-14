@@ -5,8 +5,13 @@ name: Release images
 # so this runs on a fresh clone of the repo with nothing set up.
 #
 # Pull them with:
-#   docker pull ghcr.io/<owner>/shopstop/api:latest
-#   docker pull ghcr.io/<owner>/shopstop/web:latest
+#   docker pull ghcr.io/<owner>/shopstop/api:<branch-or-sha-tag>
+#   docker pull ghcr.io/<owner>/shopstop/web:<branch-or-sha-tag>
+#
+# Note the tag: `latest` is only applied on the default branch (see the tags
+# block below), so on a feature branch the published tags are the branch name
+# and `sha-<full-commit>`. Pulling `:latest` before anything reaches main fails
+# with "manifest unknown".
 
 on:
   push:

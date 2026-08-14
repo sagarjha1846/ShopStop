@@ -3,9 +3,16 @@
 # Docker host without the source tree.
 #
 #   export IMAGE_OWNER=<your-github-owner-lowercase>
-#   export IMAGE_TAG=latest            # or a branch name / v-tag / sha-<commit>
+#   export IMAGE_TAG=<branch-name>     # see below — `latest` does not exist yet
 #   docker login ghcr.io -u <user> -p <token-with-read:packages>   # private repos only
 #   docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d
+#
+# On IMAGE_TAG: release.yml only tags `latest` on the default branch, so until
+# this work merges to main the only tags that exist are the branch name and
+# `sha-<full-commit>`. Pulling `latest` today fails with "manifest unknown".
+# List what is actually published:
+#   TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:$IMAGE_OWNER/shopstop/api:pull&service=ghcr.io" | jq -r .token)
+#   curl -s -H "Authorization: Bearer $TOKEN" https://ghcr.io/v2/$IMAGE_OWNER/shopstop/api/tags/list | jq .tags
 #
 # Postgres is intentionally NOT included: run a managed instance and point
 # DATABASE_URL at it. The API applies migrations on boot.
