@@ -152,10 +152,16 @@ jobs:
           docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml \
             --env-file .env.deploy up -d api web redis db
 
+      # Generous, because this is a cold start: pull the image, wait for Postgres to
+      # accept connections, run `prisma migrate deploy` against an empty database,
+      # then boot Nest. 60s was not enough and the step died mid-migration.
       - name: Wait for the API to come up
         run: |
-          for i in $(seq 1 60); do
-            curl -sf localhost:4000/api/v1/health/ready >/dev/null && echo "api ready after ${i}s" && exit 0
+          for i in $(seq 1 180); do
+            if curl -sf localhost:4000/api/v1/health/ready >/dev/null; then
+              echo "api ready after ${i}s"; exit 0
+            fi
+            [ $((i % 15)) -eq 0 ] && echo "still waiting (${i}s)..."
             sleep 1
           done
           echo "API never became ready"; exit 1
@@ -196,9 +202,9 @@ jobs:
             || fail "web could not reach the API through its own /api rewrite"
           echo "smoke passed against $IMAGE_TAG"
 
-      - name: Container logs on failure
-        if: failure()
-        run: docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml --env-file .env.deploy logs --tail 120
+      - name: Container logs
+        if: always()
+        run: docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml --env-file .env.deploy logs --tail 200
 
       - name: Tear down
         if: always()
