@@ -250,19 +250,18 @@ ok('cashfree order captured', cfPaid.payment?.status === 'CAPTURED', `pay=${cfPa
 
 await j('POST', '/disputes', { token: buyer, body: { orderId: orderE.id, reason: 'Never arrived, requesting a full refund please' } });
 const dispE = (await j('GET', '/admin/disputes', { token: admin })).data.find((d) => d.orderId === orderE.id);
-const revBeforeFail = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
-const refused = await j('POST', `/admin/disputes/${dispE.id}/resolve`, { token: admin, body: { status: 'RESOLVED_REFUND', resolution: 'Full refund' } });
-ok('a provider that cannot refund fails the resolution', refused.status >= 400, `status=${refused.status}`);
-const revAfterFail = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
-ok('no refund is booked when the gateway refuses', revAfterFail.refundedMinor === revBeforeFail.refundedMinor, `delta=${revAfterFail.refundedMinor - revBeforeFail.refundedMinor}`);
-const dispEAfter = (await j('GET', '/admin/disputes', { token: admin })).data.find((d) => d.orderId === orderE.id);
-ok('the dispute is handed back so an admin can retry', !!dispEAfter && dispEAfter.status === 'OPEN', `status=${dispEAfter?.status}`);
+const revBeforeCf = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+const cfRefund = await j('POST', `/admin/disputes/${dispE.id}/resolve`, { token: admin, body: { status: 'RESOLVED_REFUND', resolution: 'Full refund' } });
+ok('a second gateway refunds through the same path', cfRefund.status === 200 || cfRefund.status === 201, `status=${cfRefund.status}`);
+const revAfterCf = (await j('GET', '/admin/revenue?days=1', { token: admin })).data;
+ok('the cashfree buyer is actually refunded', revAfterCf.refundedMinor - revBeforeCf.refundedMinor === orderE.totalMinor, `delta=${revAfterCf.refundedMinor - revBeforeCf.refundedMinor} expected=${orderE.totalMinor}`);
 const orderEAfter = (await j('GET', `/orders/${orderE.id}`, { token: buyer })).data;
-ok('the order is not marked refunded on a failed refund', orderEAfter.status !== 'REFUNDED', `status=${orderEAfter.status}`);
-// Successful refunds carry the gateway's own refund id, so a ledger row can be
-// matched against the gateway rather than believed on its own.
-const succeeded = (await j('GET', '/admin/payables', { token: admin })).data;
-ok('the books balance after a refused refund', succeeded.reconciliation.balanced, `drift=${succeeded.reconciliation.driftMinor}`);
+ok('the cashfree order closes as REFUNDED', orderEAfter.status === 'REFUNDED', `status=${orderEAfter.status}`);
+const afterCf = (await j('GET', '/admin/payables', { token: admin })).data;
+ok('the books balance across two gateways', afterCf.reconciliation.balanced, `drift=${afterCf.reconciliation.driftMinor}`);
+// The gateway-refusal path (nothing booked, dispute retryable) cannot be forced
+// through here now that both adapters succeed in dev — it is pinned in
+// refunds.service.spec.ts with a gateway that throws.
 
 // --- 14. ending a paid sale gives the money back ------------------------------
 // Cancelling an ACCEPTED order and the state machine's `refund` action both used

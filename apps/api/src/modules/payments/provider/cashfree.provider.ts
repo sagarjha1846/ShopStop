@@ -7,6 +7,8 @@ import type {
   CreateIntentInput,
   CreateIntentResult,
   IPaymentProvider,
+  RefundInput,
+  RefundResult,
   WebhookEvent,
   WebhookHeaders,
 } from './payment-provider';
@@ -41,6 +43,49 @@ export class CashfreeProvider implements IPaymentProvider {
       providerOrderId: `cf_order_dev_${input.orderId.slice(-12)}`,
       clientToken: process.env.CASHFREE_APP_ID || 'cf_test_app',
     };
+  }
+
+  /**
+   * Refund through Cashfree. Two things differ from Razorpay and both are easy to
+   * get wrong: refunds are keyed on the *order*, not the payment, and amounts are
+   * in major units (rupees) — the same conversion the webhook parser does in
+   * reverse. `refund_id` is Cashfree's idempotency key, so a retried resolution
+   * cannot refund twice; it is sanitised to the alphanumeric/underscore/hyphen
+   * form Cashfree accepts and trimmed to their 40-character limit.
+   *
+   * The live branch is written from Cashfree's documented API but has not been
+   * exercised against real credentials — createIntent is still a stub here, so
+   * this provider cannot take a live payment to refund in the first place. It is
+   * safe in the meantime because a failed call throws and nothing is booked.
+   */
+  async refund(input: RefundInput): Promise<RefundResult> {
+    const refundId = `r_${input.reference}`.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+    if (!appId || !secretKey) {
+      // Dev/test: mirrors createIntent, so cancel → refund → ledger is exercisable.
+      return { providerRefundId: `cf_rfnd_dev_${refundId.slice(-16)}` };
+    }
+    const res = await fetch(`https://api.cashfree.com/pg/orders/${input.providerOrderId}/refunds`, {
+      method: 'POST',
+      headers: {
+        'x-client-id': appId,
+        'x-client-secret': secretKey,
+        'x-api-version': '2023-08-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        refund_amount: input.amountMinor / 100,
+        refund_id: refundId,
+        refund_note: `Refund for ${input.reference}`,
+      }),
+    });
+    if (!res.ok) {
+      this.logger.error(`Cashfree refund failed for ${input.providerOrderId}: ${res.status}`);
+      throw new AppError('PAYMENT_ERROR', 'Gateway refused the refund');
+    }
+    const data = (await res.json()) as { cf_refund_id?: string | number; refund_id?: string };
+    return { providerRefundId: String(data.cf_refund_id ?? data.refund_id ?? refundId) };
   }
 
   verifyAndParseWebhook(rawBody: Buffer, headers: WebhookHeaders): WebhookEvent {

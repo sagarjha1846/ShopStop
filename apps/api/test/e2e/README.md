@@ -90,10 +90,12 @@ Each prints PASS/FAIL per assertion and exits non-zero on any failure.
   proportion, the seller's debt drops by the refund net of that reversal, the order
   is not marked REFUNDED, the remainder becomes payable once the dispute closes,
   a second resolution is refused, and the reconciliation still balances throughout.
-  And the gateway path: refunds used to be ledger-only, so the suite pins that a
-  provider which cannot refund (Cashfree implements none — a real limitation, not a
-  mock) fails the resolution outright, books nothing, hands the dispute back as OPEN
-  for an admin to retry, and leaves the order un-refunded. And the two other ways a
+  And the gateway path: refunds used to be ledger-only, so the suite drives a
+  Cashfree-paid order through dispute → refund and pins that a second gateway
+  refunds through the same shared path with the books still balancing. The
+  gateway-*refusal* path (nothing booked, dispute handed back as OPEN) can't be
+  forced here now that both adapters succeed in dev — it lives in
+  `src/modules/payments/refunds.service.spec.ts` with a gateway that throws. And the two other ways a
   paid sale can end — cancelling an ACCEPTED order and the state machine's `refund`
   action — which changed status and moved no money at all; both now refund in full,
   hand back the commission, and leave the reconciliation balanced.

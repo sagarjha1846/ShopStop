@@ -36,6 +36,8 @@ export interface ClientCallback {
 
 export interface RefundInput {
   providerPaymentId: string;
+  /** Some gateways key refunds on the order rather than the payment (Cashfree does). */
+  providerOrderId: string;
   amountMinor: number;
   /** Our own reference, so a gateway refund can be traced back to an order. */
   reference: string;

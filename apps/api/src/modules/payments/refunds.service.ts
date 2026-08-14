@@ -94,6 +94,7 @@ export class RefundsService {
     // retried caller cannot refund twice.
     const { providerRefundId } = await provider.refund({
       providerPaymentId: payment.providerPaymentId,
+      providerOrderId: payment.providerOrderId ?? '',
       amountMinor: refundMinor,
       reference,
     });

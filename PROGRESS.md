@@ -204,6 +204,18 @@ Design package (docs/) is complete; this tracks **implementation**.
       as the idempotency guard. Structurally, refunds sit in their own module depending only
       on the gateway adapters: payments depends on orders, so hanging refunds off
       PaymentsModule would have closed a cycle — verified 80/80
+- [x] Closed the Cashfree refund gap that the previous slice left open. Refusing loudly was
+      safe but it meant a Cashfree order could no longer be cancelled *at all*, since a paid
+      order that cannot be refunded must not move to a status claiming it was. Implemented
+      against Cashfree's documented API, where two things differ from Razorpay and both are
+      easy to get wrong: refunds key on the order rather than the payment, and amounts are in
+      major units — the same conversion the webhook parser already does in reverse. The live
+      branch is unexercised (createIntent is still a stub for this provider, so it cannot take
+      a live payment to refund) and says so; it is safe meanwhile because a failed call throws
+      and books nothing. Also added `refunds.service.spec.ts` (6 unit tests) for the ordering
+      guarantee the E2E can no longer reach now that both adapters succeed in dev: a refusing
+      gateway writes no ledger row, an uncaptured or already-refunded order never calls out,
+      over-refunding is refused, and a provider without `refund()` fails loudly
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s
@@ -221,7 +233,7 @@ Design package (docs/) is complete; this tracks **implementation**.
       GET /admin/funnel (ADMIN-only) + admin console panel — verified 22/22
 
 ## Phase 7 — Hardening & delivery
-- [x] Test suites: 41 unit + 17 black-box E2E suites (353 API checks); CI runs unit +
+- [x] Test suites: 47 unit + 17 black-box E2E suites (352 API checks); CI runs unit +
       commerce/trust/notification-preferences/revenue/boosts/subscriptions/funnel/questions/feature-flags/read-receipts/payment-verify/payables E2E
 - [x] Security scans in CI (dep audit + gitleaks + Semgrep; Trivy/ZAP → when images publish)
 - [x] Observability: Prometheus /metrics (default + RED per-route histograms) — verified live
