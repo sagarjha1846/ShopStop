@@ -49,11 +49,16 @@ registry secrets needed, it uses the workflow's own token.
 registry login):
 
 ```bash
-export IMAGE_OWNER=sagarjha1846
-export IMAGE_TAG=claude-project-continuation-np7izb   # `latest` appears once this merges to main
-cp .env.example .env.deploy                           # then fill in real secrets
+# .env.deploy.example carries IMAGE_OWNER/IMAGE_TAG and the container-topology
+# hosts. Do NOT start from .env.example — that configures a laptop, where
+# everything is on localhost and the secrets are deliberately worthless.
+cp .env.deploy.example .env.deploy    # then fill in the MUST SET values
 docker compose -f docker-compose.deploy.yml --env-file .env.deploy up -d
 ```
+
+The images are smoke-tested on every push: the release workflow pulls what it
+just published, brings it up through this same compose file, and drives real
+endpoints against it, so a broken artifact fails in CI rather than on your host.
 
 Published images (branch tag + `sha-<commit>`, and `latest` on the default branch):
 
