@@ -35,6 +35,11 @@ export class RazorpayProvider implements IPaymentProvider {
   private get configured(): boolean {
     const id = this.config.get('RAZORPAY_KEY_ID');
     const secret = this.config.get('RAZORPAY_KEY_SECRET');
+    // Empty is not configured. docker-compose.deploy.yml passes these through
+    // unconditionally, so an operator who sets no payment keys sends '' rather
+    // than nothing — and a bare placeholder check reads '' as real credentials
+    // and starts calling the live Razorpay API with empty auth.
+    if (!id || !secret) return false;
     return !id.includes('xxxxxxxx') && !secret.includes('xxxxxxxx');
   }
 

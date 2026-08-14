@@ -108,3 +108,91 @@ jobs:
             echo ''
             echo "digest: \`${{ steps.build.outputs.digest }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Does the artifact we just published actually run? Building and pushing an
+  # image only proves it compiled. This pulls the pushed images the way an
+  # operator would and drives real endpoints against them, so a broken deploy is
+  # caught here rather than on someone's server. The API Dockerfile migrates on
+  # boot, so this also exercises `prisma migrate deploy` against an empty database.
+  deploy-smoke:
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      # Pin to this commit's tag, not the branch tag: the branch tag is mutable and
+      # a concurrent push would have the smoke test grade the wrong image.
+      - name: Resolve image coordinates
+        run: |
+          echo "IMAGE_OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=sha-${{ github.sha }}" >> "$GITHUB_ENV"
+
+      - name: Write deploy env
+        run: |
+          cat > .env.deploy <<'ENV'
+          DATABASE_URL=postgresql://shopstop:shopstop@db:5432/shopstop?schema=public
+          REDIS_URL=redis://redis:6379
+          JWT_ACCESS_SECRET=smoke-access-secret-0000000000000
+          JWT_REFRESH_SECRET=smoke-refresh-secret-000000000000
+          ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
+          WEB_BASE_URL=http://localhost:3000
+          EMAIL_FROM=smoke@example.com
+          ENV
+          echo "IMAGE_OWNER=$IMAGE_OWNER" >> .env.deploy
+          echo "IMAGE_TAG=$IMAGE_TAG" >> .env.deploy
+
+      - name: Start the published stack
+        run: |
+          docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml \
+            --env-file .env.deploy up -d api web redis db
+
+      - name: Wait for the API to come up
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf localhost:4000/api/v1/health/ready >/dev/null && echo "api ready after ${i}s" && exit 0
+            sleep 1
+          done
+          echo "API never became ready"; exit 1
+
+      - name: Drive the running images
+        run: |
+          set -euo pipefail
+          fail() { echo "SMOKE FAIL: $1"; exit 1; }
+
+          # Migrations ran against an empty database if the seeded-free schema serves.
+          curl -sf localhost:4000/api/v1/categories >/dev/null || fail "categories did not serve"
+
+          # A real write through Argon2 + Postgres + Redis session storage.
+          EMAIL="smoke_$(date +%s)@example.com"
+          TOKEN=$(curl -sf -X POST localhost:4000/api/v1/auth/register \
+            -H 'content-type: application/json' \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"smokepass12345\"}" \
+            | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])') || fail "register failed"
+
+          # The payables/payout SQL is hand-written and the most likely thing to
+          # break against a freshly migrated schema, so hit it rather than assume.
+          curl -sf localhost:4000/api/v1/me/payouts -H "authorization: Bearer $TOKEN" \
+            | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["heldMinor"]==0,d' || fail "payout view broke"
+
+          # RBAC is wired in the running image, not just in tests.
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' localhost:4000/api/v1/admin/payables \
+            -H "authorization: Bearer $TOKEN")
+          [ "$CODE" = "403" ] || fail "admin payables returned $CODE for a normal user, expected 403"
+
+          # And the web image serves its shell against the API container.
+          curl -sf -o /dev/null localhost:3000/login || fail "web did not serve /login"
+          echo "smoke passed against $IMAGE_TAG"
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml --env-file .env.deploy logs --tail 120
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml --env-file .env.deploy down -v

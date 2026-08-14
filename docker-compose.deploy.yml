@@ -23,26 +23,30 @@ services:
     environment:
       NODE_ENV: production
       API_PORT: 4000
+      # Compose substitutes an unset variable as an empty string, which is NOT the
+      # same as absent: it overrides the API's own schema default and then fails
+      # validation (S3_ENDPOINT must parse as a URL, SMTP_PORT must be a positive
+      # integer). Every pass-through below therefore carries the schema's default.
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      WEB_BASE_URL: ${WEB_BASE_URL}
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_BUCKET: ${S3_BUCKET}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://localhost:9000}
+      S3_BUCKET: ${S3_BUCKET:-shopstop-media}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-shopstop}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-shopstop-secret}
       S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
-      CDN_BASE_URL: ${CDN_BASE_URL}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET}
-      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET}
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT}
+      CDN_BASE_URL: ${CDN_BASE_URL:-http://localhost:9000/shopstop-media}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_xxxxxxxx}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-xxxxxxxx}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-whsec_xxxxxxxx}
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
-      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_FROM: ${EMAIL_FROM:-ShopStop <no-reply@shopstop.local>}
       PLATFORM_FEE_BPS: ${PLATFORM_FEE_BPS:-200}
       BOOST_PRICE_PER_DAY_MINOR: ${BOOST_PRICE_PER_DAY_MINOR:-4900}
       MDR_CARD_BPS: ${MDR_CARD_BPS:-200}
@@ -63,7 +67,7 @@ services:
     environment:
       NODE_ENV: production
       API_BASE_URL: http://api:4000
-      NEXT_PUBLIC_CDN_BASE_URL: ${CDN_BASE_URL}
+      NEXT_PUBLIC_CDN_BASE_URL: ${CDN_BASE_URL:-http://localhost:9000/shopstop-media}
     depends_on:
       - api
     expose:

@@ -1,0 +1,38 @@
+# Overlay for smoke-testing the published images before anyone trusts them.
+#
+# docker-compose.deploy.yml deliberately ships no database and exposes no ports —
+# a real deploy points DATABASE_URL at a managed instance and terminates TLS at
+# the Caddy proxy. Neither is available in CI, and neither is what the smoke test
+# is checking: the question is whether the image that was just pushed actually
+# boots, migrates, and serves. So this overlay supplies a throwaway Postgres and
+# publishes the ports directly, skipping the proxy.
+#
+#   docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml \
+#     --env-file .env.deploy up -d api web redis db
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: shopstop
+      POSTGRES_PASSWORD: shopstop
+      POSTGRES_DB: shopstop
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shopstop']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    # The image migrates on boot, so it must not start before Postgres accepts
+    # connections — otherwise the smoke test measures a race, not the artifact.
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '4000:4000'
+
+  web:
+    ports:
+      - '3000:3000'

@@ -250,6 +250,20 @@ Design package (docs/) is complete; this tracks **implementation**.
 - [x] Deploy config: multi-stage Dockerfiles (api + web standalone), docker-compose.prod,
       Caddy edge (auto-HTTPS + security headers), runtime migrate-on-boot, .dockerignore
 - [x] SessionStart hook (auto-provision Postgres/Redis/.env/deps/migrate/seed)
+- [x] Deploy smoke test: the release workflow now pulls the images it just pushed, runs them
+      through `docker-compose.deploy.yml` the way an operator would (with a throwaway Postgres
+      and published ports via `ops/docker-compose.smoke.yml`), and drives real endpoints —
+      migrate-on-boot, a registration write, the hand-written payables SQL against a freshly
+      migrated schema, RBAC returning 403, and the web image serving. Building an image only
+      proves it compiled. Writing this found three deploy-blocking bugs before it ever ran:
+      compose substitutes an unset variable as an empty string rather than omitting it, which
+      overrides the API's own schema defaults — `S3_ENDPOINT=""` fails `.url()` and
+      `SMTP_PORT=""` coerces to 0 and fails `.positive()`, so a minimal `.env.deploy` would
+      not boot at all (measured: "SMTP_PORT: Number must be greater than 0", "S3_ENDPOINT:
+      Invalid url"). Worse, empty Razorpay keys made `configured` return **true**, so a deploy
+      with no payment credentials would call the live gateway with empty auth instead of
+      falling back to dev mode. Fixed by mirroring the schema defaults at the compose layer
+      and treating empty credentials as unconfigured
 - [x] Images published to GHCR on every push (release.yml, built-in token — no secrets to set),
       plus docker-compose.deploy.yml that pulls rather than builds. Verified: both images
       anonymously pullable from ghcr.io. Fixed two real blockers found by running it — the API
