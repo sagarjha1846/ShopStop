@@ -22,7 +22,16 @@ COPY apps/api apps/api
 # one we actually want.
 RUN pnpm --filter @shopstop/api exec prisma generate \
   && pnpm --filter @shopstop/api build \
-  && pnpm --filter @shopstop/api --prod --legacy deploy /out
+  && pnpm --filter @shopstop/api --prod --legacy deploy /out \
+  # `pnpm deploy` rebuilds node_modules in /out from the lockfile, which undoes the
+  # generate above: the pruned bundle gets a stock @prisma/client whose exports are
+  # all undefined. Nothing complains at build time — the image simply dies on boot
+  # at the first decorator that uses a Prisma enum as a value. Generate again, into
+  # the bundle that actually ships.
+  && cd /out && ./node_modules/.bin/prisma generate --schema=/repo/apps/api/prisma/schema.prisma \
+  # And prove it landed, so this fails the build rather than the deployment. Any
+  # enum will do; it is only exported when the client was really generated.
+  && node -e "const {CouponType}=require('/out/node_modules/@prisma/client'); if(!CouponType) throw new Error('Prisma client in /out has no enums — generate did not reach the pruned bundle'); console.log('prisma client ok:', Object.keys(CouponType).join(','))"
 
 # ---- runtime ----------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime

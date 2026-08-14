@@ -166,41 +166,10 @@ jobs:
           done
           echo "API never became ready"; exit 1
 
+      # The same script an operator runs against their own deployment, so CI and
+      # "did my deploy work?" cannot drift apart.
       - name: Drive the running images
-        run: |
-          set -euo pipefail
-          fail() { echo "SMOKE FAIL: $1"; exit 1; }
-
-          # Migrations ran against an empty database if the seeded-free schema serves.
-          curl -sf localhost:4000/api/v1/categories >/dev/null || fail "categories did not serve"
-
-          # A real write through Argon2 + Postgres + Redis session storage.
-          EMAIL="smoke_$(date +%s)@example.com"
-          TOKEN=$(curl -sf -X POST localhost:4000/api/v1/auth/register \
-            -H 'content-type: application/json' \
-            -d "{\"email\":\"$EMAIL\",\"password\":\"smokepass12345\"}" \
-            | python3 -c 'import sys,json;print(json.load(sys.stdin)["accessToken"])') || fail "register failed"
-
-          # The payables/payout SQL is hand-written and the most likely thing to
-          # break against a freshly migrated schema, so hit it rather than assume.
-          curl -sf localhost:4000/api/v1/me/payouts -H "authorization: Bearer $TOKEN" \
-            | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["heldMinor"]==0,d' || fail "payout view broke"
-
-          # RBAC is wired in the running image, not just in tests.
-          CODE=$(curl -s -o /dev/null -w '%{http_code}' localhost:4000/api/v1/admin/payables \
-            -H "authorization: Bearer $TOKEN")
-          [ "$CODE" = "403" ] || fail "admin payables returned $CODE for a normal user, expected 403"
-
-          # And the web image serves its shell against the API container.
-          curl -sf -o /dev/null localhost:3000/login || fail "web did not serve /login"
-
-          # The browser talks to the API through the web origin, and next.config's
-          # rewrite is baked at build time — so this is the assertion that catches a
-          # web image built pointing at the wrong API host. Serving /login would not:
-          # that renders fine while every API call from the page proxies into a void.
-          curl -sf -o /dev/null localhost:3000/api/v1/categories \
-            || fail "web could not reach the API through its own /api rewrite"
-          echo "smoke passed against $IMAGE_TAG"
+        run: ops/smoke.sh http://localhost:4000 http://localhost:3000
 
       - name: Container logs
         if: always()
