@@ -187,6 +187,13 @@ jobs:
 
           # And the web image serves its shell against the API container.
           curl -sf -o /dev/null localhost:3000/login || fail "web did not serve /login"
+
+          # The browser talks to the API through the web origin, and next.config's
+          # rewrite is baked at build time — so this is the assertion that catches a
+          # web image built pointing at the wrong API host. Serving /login would not:
+          # that renders fine while every API call from the page proxies into a void.
+          curl -sf -o /dev/null localhost:3000/api/v1/categories \
+            || fail "web could not reach the API through its own /api rewrite"
           echo "smoke passed against $IMAGE_TAG"
 
       - name: Container logs on failure

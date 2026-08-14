@@ -264,6 +264,16 @@ Design package (docs/) is complete; this tracks **implementation**.
       with no payment credentials would call the live gateway with empty auth instead of
       falling back to dev mode. Fixed by mirroring the schema defaults at the compose layer
       and treating empty credentials as unconfigured
+- [x] Fixed a latent trap in the web image: `next.config.mjs` builds its `/api/*` rewrite from
+      `API_BASE_URL`, and Next evaluates `rewrites()` during `next build` and bakes the result
+      into `routes-manifest.json` — so setting it at runtime, as docker-compose.deploy.yml did,
+      does nothing. The published image had `/api/*` baked to `http://localhost:4000`, which
+      inside the web container is the web container. The shipped Caddyfile masks it by routing
+      `/api/*` straight to `api:4000`, so it is not an active break in the documented topology,
+      but behind any other ingress every browser API call would proxy into a void. Now a build
+      ARG defaulting to `http://api:4000`, verified by rebuilding and reading the manifest. The
+      smoke test asserts it through the web origin — serving `/login` would not have caught it,
+      since the page renders fine while its API calls fail
 - [x] Images published to GHCR on every push (release.yml, built-in token — no secrets to set),
       plus docker-compose.deploy.yml that pulls rather than builds. Verified: both images
       anonymously pullable from ghcr.io. Fixed two real blockers found by running it — the API
