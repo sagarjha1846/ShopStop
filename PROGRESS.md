@@ -216,6 +216,16 @@ Design package (docs/) is complete; this tracks **implementation**.
       guarantee the E2E can no longer reach now that both adapters succeed in dev: a refusing
       gateway writes no ledger row, an uncaptured or already-refunded order never calls out,
       over-refunding is refused, and a provider without `refund()` fails loudly
+- [x] Disputes are resolvable from the admin console. The panel listed open disputes and
+      offered no actions at all — every resolution, refund included, was curl-only, so the
+      partial-refund fix was unreachable from the product. Now each dispute carries Refund in
+      full / Partial refund (with an amount box validated to a real slice of the charge —
+      zero is a release and the whole amount is a full refund, each with its own button) /
+      Release to seller, and gateway failures surface instead of being swallowed, since a
+      refused refund leaves the dispute open and the operator needs to know why. Driven in
+      Chromium against the live API: a ₹2,500 partial refund on a ₹10,000 order moved
+      exactly ₹2,500 back, reversed ₹50 of commission, left the reconciliation at zero drift
+      and cleared the dispute from the queue
 
 ## Phase 9 — Measurement & operations
 - [x] Feature flags (docs/03 §13): declared registry with defaults, admin list/toggle, 30s

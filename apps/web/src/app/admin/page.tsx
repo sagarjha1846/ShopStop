@@ -130,6 +130,45 @@ export default function AdminPage() {
     }
   }
   const [msg, setMsg] = useState<string | null>(null);
+  const [resolving, setResolving] = useState<string | null>(null);
+  const [partialRupees, setPartialRupees] = useState<Record<string, string>>({});
+  const [disputeMsg, setDisputeMsg] = useState<string | null>(null);
+
+  /**
+   * Resolve a dispute. A refund here moves real money through the gateway, so a
+   * failure has to be shown rather than swallowed — if the gateway refuses, the
+   * dispute stays open and the operator needs to know why.
+   */
+  async function resolveDispute(d: Dispute, status: string, refundAmountMinor?: number) {
+    setResolving(d.id);
+    setDisputeMsg(null);
+    try {
+      await apiAuthed(`/admin/disputes/${d.id}/resolve`, {
+        method: 'POST',
+        body: {
+          status,
+          resolution:
+            status === 'RESOLVED_REFUND'
+              ? 'Refunded in full'
+              : status === 'RESOLVED_PARTIAL'
+                ? `Partial refund of ${formatMoney(refundAmountMinor ?? 0, d.order?.currency ?? 'INR')}`
+                : 'Released to the seller',
+          ...(refundAmountMinor !== undefined ? { refundAmountMinor } : {}),
+        },
+      });
+      setDisputeMsg(
+        status === 'RESOLVED_RELEASE'
+          ? 'Released to the seller.'
+          : `Refunded ${formatMoney(refundAmountMinor ?? d.order?.totalMinor ?? 0, d.order?.currency ?? 'INR')} to the buyer.`,
+      );
+      await loadQueue();
+      setPayables(await apiAuthed<Payables>('/admin/payables'));
+    } catch (e) {
+      setDisputeMsg(e instanceof Error ? e.message : 'Could not resolve the dispute');
+    } finally {
+      setResolving(null);
+    }
+  }
 
   /**
    * Record a settlement already sent to the seller's bank. This does not move
@@ -607,23 +646,79 @@ export default function AdminPage() {
 
       <section>
         <h2 className="mb-2 font-semibold">Open disputes ({disputes.length})</h2>
+        {disputeMsg && <p className="mb-2 text-sm">{disputeMsg}</p>}
         {disputes.length === 0 ? (
           <p className="text-muted">No open disputes.</p>
         ) : (
           <ul className="space-y-2">
-            {disputes.map((d) => (
-              <li key={d.id} className="rounded-lg border bg-surface p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{d.reason}</span>
-                  <Badge tone="warn">{d.status}</Badge>
-                </div>
-                {d.order && (
-                  <div className="text-xs text-muted">
-                    Order {formatMoney(d.order.totalMinor, d.order.currency)}
+            {disputes.map((d) => {
+              const total = d.order?.totalMinor ?? 0;
+              const currency = d.order?.currency ?? 'INR';
+              const typed = partialRupees[d.id] ?? '';
+              const partialMinor = Math.round(Number(typed) * 100);
+              // A partial has to be a real slice of the charge: zero is a release
+              // and the whole amount is a full refund, each with its own button.
+              const partialValid = Number.isFinite(partialMinor) && partialMinor > 0 && partialMinor < total;
+              const busy = resolving === d.id;
+              return (
+                <li key={d.id} className="rounded-lg border bg-surface p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{d.reason}</span>
+                    <Badge tone="warn">{d.status}</Badge>
                   </div>
-                )}
-              </li>
-            ))}
+                  {d.order && (
+                    <div className="text-xs text-muted">Order {formatMoney(total, currency)}</div>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className="px-3 py-1 text-xs"
+                      disabled={busy}
+                      onClick={() => resolveDispute(d, 'RESOLVED_REFUND')}
+                    >
+                      Refund {formatMoney(total, currency)}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="px-3 py-1 text-xs"
+                      disabled={busy}
+                      onClick={() => resolveDispute(d, 'RESOLVED_RELEASE')}
+                    >
+                      Release to seller
+                    </Button>
+                    <span className="ml-2 flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(total / 100 - 1, 1)}
+                        placeholder="part ₹"
+                        aria-label="Partial refund amount in rupees"
+                        value={typed}
+                        onChange={(e) => setPartialRupees((p) => ({ ...p, [d.id]: e.target.value }))}
+                        className="w-24 rounded-md border bg-transparent px-2 py-1 text-xs"
+                      />
+                      <Button
+                        variant="outline"
+                        className="px-3 py-1 text-xs"
+                        disabled={busy || !partialValid}
+                        onClick={() => resolveDispute(d, 'RESOLVED_PARTIAL', partialMinor)}
+                      >
+                        Partial refund
+                      </Button>
+                    </span>
+                  </div>
+                  {typed !== '' && !partialValid && (
+                    <p className="mt-1 text-xs text-danger">
+                      Enter an amount between ₹1 and {formatMoney(total - 100, currency)} — use Refund
+                      for the whole charge.
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-muted">
+                    Refunds send money back through the gateway that took it.
+                  </p>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
