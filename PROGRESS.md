@@ -263,7 +263,21 @@ Design package (docs/) is complete; this tracks **implementation**.
       Invalid url"). Worse, empty Razorpay keys made `configured` return **true**, so a deploy
       with no payment credentials would call the live gateway with empty auth instead of
       falling back to dev mode. Fixed by mirroring the schema defaults at the compose layer
-      and treating empty credentials as unconfigured
+      and treating empty credentials as unconfigured. Then it found the real one: **every
+      API image published before this point could not start at all**. `pnpm deploy` rebuilds
+      /out/node_modules from the lockfile, discarding the generated Prisma client, so the
+      image shipped a stock `@prisma/client` with every export undefined and died on boot at
+      `@IsEnum(CouponType)`. Migrations still ran (both prisma packages are prod deps), so it
+      read as a slow start rather than a dead artifact — and the images had only ever been
+      verified as *pullable*, which is not *runnable*. Generating in the build stage cannot
+      fix it: Prisma resolves output from the schema's directory, not the cwd, so it writes
+      back into /repo wherever it is invoked. Generate now runs in the runtime stage, where
+      the schema and the shipping node_modules are siblings, with a build-time assertion that
+      an enum is really exported — which promptly caught the first (wrong) fix. Verified
+      green: the published stack boots, migrates, registers a user, serves the payables SQL,
+      enforces RBAC, and the web container reaches the API through its own baked rewrite
+- [x] `ops/smoke.sh`: the same checks an operator can run against their own deployment, so
+      "did my deploy work?" has an answer that is not "read the CI config"
 - [x] Fixed a latent trap in the web image: `next.config.mjs` builds its `/api/*` rewrite from
       `API_BASE_URL`, and Next evaluates `rewrites()` during `next build` and bakes the result
       into `routes-manifest.json` — so setting it at runtime, as docker-compose.deploy.yml did,
