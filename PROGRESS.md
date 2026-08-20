@@ -278,6 +278,14 @@ Design package (docs/) is complete; this tracks **implementation**.
       enforces RBAC, and the web container reaches the API through its own baked rewrite
 - [x] `ops/smoke.sh`: the same checks an operator can run against their own deployment, so
       "did my deploy work?" has an answer that is not "read the CI config"
+- [x] docker-compose.prod.yml (the README's "from source" path) carried the identical env
+      trap as docker-compose.deploy.yml and had never been exercised, so it was hand-fixed
+      blind: unset compose vars now default the same way, and web's build gets
+      `API_BASE_URL: http://api:4000` as a build arg rather than a no-op runtime env var.
+      Added `deploy-smoke-source` to CI, which builds this file from source (not pull) and
+      runs the same `ops/smoke.sh` against it — the Dockerfiles are already proven by the
+      registry-image smoke test, so this exists specifically to verify the compose wiring
+      that was just changed without ever having been run
 - [x] Fixed a latent trap in the web image: `next.config.mjs` builds its `/api/*` rewrite from
       `API_BASE_URL`, and Next evaluates `rewrites()` during `next build` and bakes the result
       into `routes-manifest.json` — so setting it at runtime, as docker-compose.deploy.yml did,

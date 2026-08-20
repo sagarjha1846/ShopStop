@@ -178,3 +178,54 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f docker-compose.deploy.yml -f ops/docker-compose.smoke.yml --env-file .env.deploy down -v
+
+  # docker-compose.prod.yml is the README's other documented path — build from
+  # source instead of pulling from GHCR — and it has never been exercised in CI.
+  # It shares apps/api/Dockerfile and apps/web/Dockerfile with the images job
+  # above, so those are already proven; what is NOT proven is this file's own
+  # env-var wiring, which was hand-edited to match deploy.yml's fix (unset compose
+  # vars pass through as "", not absent, and Next bakes API_BASE_URL at build
+  # time) without ever being run. This job is that verification.
+  deploy-smoke-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write deploy env
+        run: |
+          cat > .env.deploy <<'ENV'
+          DATABASE_URL=postgresql://shopstop:shopstop@db:5432/shopstop?schema=public
+          REDIS_URL=redis://redis:6379
+          JWT_ACCESS_SECRET=smoke-access-secret-0000000000000
+          JWT_REFRESH_SECRET=smoke-refresh-secret-000000000000
+          ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
+          WEB_BASE_URL=http://localhost:3000
+          EMAIL_FROM=smoke@example.com
+          ENV
+
+      - name: Build and start the stack from source
+        run: |
+          docker compose -f docker-compose.prod.yml -f ops/docker-compose.smoke.yml \
+            --env-file .env.deploy up -d --build api web redis db
+
+      - name: Wait for the API to come up
+        run: |
+          for i in $(seq 1 180); do
+            if curl -sf localhost:4000/api/v1/health/ready >/dev/null; then
+              echo "api ready after ${i}s"; exit 0
+            fi
+            [ $((i % 15)) -eq 0 ] && echo "still waiting (${i}s)..."
+            sleep 1
+          done
+          echo "API never became ready"; exit 1
+
+      - name: Drive the running images
+        run: ops/smoke.sh http://localhost:4000 http://localhost:3000
+
+      - name: Container logs
+        if: always()
+        run: docker compose -f docker-compose.prod.yml -f ops/docker-compose.smoke.yml --env-file .env.deploy logs --tail 200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.prod.yml -f ops/docker-compose.smoke.yml --env-file .env.deploy down -v
