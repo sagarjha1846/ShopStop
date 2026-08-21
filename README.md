@@ -72,6 +72,12 @@ this runs on a ~$25/mo VPS at launch scale.
 
 **From source** instead: `docker compose -f docker-compose.prod.yml up -d --build`.
 
+**Free tier, no VPS needed:** [`render.yaml`](render.yaml) provisions the API +
+Postgres + Redis on Render in one Blueprint apply (`New +` → `Blueprint`). Web
+is deliberately a second, manual step — Next bakes the API's origin into the
+image at build time, and that origin doesn't exist until the API service does.
+`render.yaml` has the exact sequence at the top of the file.
+
 > **Before taking real payments**, read the monetization analysis — the current
 > money flow captures funds into the platform's own gateway account with no
 > settlement path to sellers, which is both a growing payable and a regulatory

@@ -1,0 +1,69 @@
+# Render Blueprint — Part 1 of 2: everything Render can know about in advance.
+#
+# Deliberately does NOT declare the web service here. next.config's rewrites()
+# bakes API_BASE_URL into the image at build time (see apps/web/Dockerfile), and
+# Render assigns each service its own hostname only once it exists — there is no
+# value this file could put in `image.url` today that would be correct once `api`
+# is live. Trying to guess it (e.g. assuming Render's internal DNS matches
+# docker-compose's `api:4000` convention) is exactly the class of bug this whole
+# deploy effort was built to catch, so it isn't guessed here either.
+#
+# Sequence:
+#   1. New + → Blueprint → connect this repo/branch → Apply. Render provisions
+#      api + shopstop-db + shopstop-cache. Provide ENCRYPTION_KEY when prompted
+#      (see below); JWT secrets are generated for you.
+#   2. Once `api` is live, copy its https://*.onrender.com URL.
+#   3. Actions tab → "Release images" → Run workflow → paste that URL into
+#      web_api_base_url → Run. This publishes
+#      ghcr.io/sagarjha1846/shopstop/web:custom-origin, built with the API
+#      origin actually baked in correctly.
+#   4. New + → Web Service → Existing Image → that image URL → Free plan → Create.
+#      No env vars needed on web; it talks to the browser, not the database.
+#
+# ENCRYPTION_KEY needs to be hex specifically (it's validated at boot — see
+# apps/api/src/config/env.schema.ts), and Render's generateValue doesn't
+# guarantee a character set, so it stays a manual paste rather than auto-generated:
+#   openssl rand -hex 32
+
+databases:
+  - name: shopstop-db
+    plan: free
+
+services:
+  - type: keyvalue
+    name: shopstop-cache
+    plan: free
+    # BullMQ jobs and idempotency keys live here. On the free 25MB/in-memory tier,
+    # noeviction means a full cache surfaces as a visible error rather than
+    # silently dropping a job or a rate-limit counter.
+    maxmemoryPolicy: noeviction
+
+  - type: web
+    name: api
+    runtime: image
+    image:
+      url: ghcr.io/sagarjha1846/shopstop/api:sha-7f4e61414456bfd2d2812da977d9c42b9a55f4a1
+    plan: free
+    healthCheckPath: /api/v1/health/ready
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: shopstop-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: shopstop-cache
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false
+      # Everything else (Razorpay, S3, SMTP, commission bps) has a working
+      # default in env.schema.ts and stays unset here on purpose: Razorpay's
+      # placeholder default keeps checkout in dev/synthetic mode, which is the
+      # right starting state before real merchant credentials exist. Add real
+      # values as Render env vars once you have them — no redeploy needed for
+      # anything except web's baked API origin.
